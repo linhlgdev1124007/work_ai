@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, getSocketUrl } from '@/lib/api';
 import { io, Socket } from 'socket.io-client';
 import { Markdown } from '@/components/markdown';
@@ -29,6 +29,129 @@ function connectionLabel(state: ConnectionState) {
   if (state === 'reconnecting') return 'Đang kết nối lại';
   if (state === 'error') return 'Socket cần đăng nhập lại';
   return 'Đang kết nối';
+}
+
+type MentionTarget = { id: string; label: string; insert: string; assistant?: boolean };
+
+function normalizeMention(value: string) {
+  return value.toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').trim();
+}
+
+function findMentionToken(value: string, caret: number) {
+  const beforeCaret = value.slice(0, caret);
+  const atIndex = beforeCaret.lastIndexOf('@');
+  if (atIndex < 0) return null;
+  const token = beforeCaret.slice(atIndex + 1);
+  if (token.includes('@') || token.includes('\n') || token.length > 80) return null;
+  if (atIndex > 0 && !/\s/.test(value[atIndex - 1])) return null;
+  return { start: atIndex, end: caret, query: token };
+}
+
+function MentionInput({
+  value,
+  members,
+  disabled,
+  onChange,
+  onMention,
+  onTyping
+}: {
+  value: string;
+  members: any[];
+  disabled: boolean;
+  onChange: (value: string) => void;
+  onMention: (id: string) => void;
+  onTyping: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [token, setToken] = useState<{ start: number; end: number; query: string } | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const targets = useMemo<MentionTarget[]>(() => [
+    { id: 'b6', label: 'b6', insert: '@b6 ', assistant: true },
+    ...members.map(member => ({ id: member.id, label: member.fullName, insert: `@${member.fullName} ` }))
+  ], [members]);
+  const options = useMemo(() => {
+    if (!token) return [];
+    const query = normalizeMention(token.query);
+    return targets.filter(target => normalizeMention(target.label).includes(query)).slice(0, 8);
+  }, [targets, token]);
+
+  const updateToken = (nextValue: string, caret: number | null) => {
+    const nextToken = caret === null ? null : findMentionToken(nextValue, caret);
+    setToken(nextToken);
+    setActiveIndex(0);
+  };
+
+  const selectTarget = (target: MentionTarget) => {
+    const current = inputRef.current;
+    const caret = current?.selectionStart ?? value.length;
+    const currentToken = token || findMentionToken(value, caret);
+    if (!currentToken) return;
+    const nextValue = `${value.slice(0, currentToken.start)}${target.insert}${value.slice(currentToken.end)}`;
+    onChange(nextValue);
+    onTyping();
+    if (!target.assistant) onMention(target.id);
+    setToken(null);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(currentToken.start + target.insert.length, currentToken.start + target.insert.length);
+    });
+  };
+
+  return (
+    <div className="relative flex-1 min-w-0">
+      {token && options.length > 0 && (
+        <div id="mention-options" role="listbox" className="absolute bottom-full left-0 mb-2 w-full max-w-sm rounded-md border border-zinc-200 bg-white shadow-lg overflow-hidden z-20">
+          {options.map((option, index) => (
+            <button
+              key={option.id}
+              type="button"
+              role="option"
+              aria-selected={index === activeIndex}
+              className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${index === activeIndex ? 'bg-emerald-50 text-emerald-800' : 'text-zinc-800 hover:bg-zinc-50'}`}
+              onMouseDown={event => { event.preventDefault(); selectTarget(option); }}
+            >
+              {option.assistant ? <Bot className="w-4 h-4 text-emerald-600" /> : <User className="w-4 h-4 text-zinc-500" />}
+              <span className="font-semibold truncate">@{option.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        type="text"
+        role="combobox"
+        aria-label="Nội dung tin nhắn"
+        aria-expanded={!!token && options.length > 0}
+        aria-controls="mention-options"
+        disabled={disabled}
+        value={value}
+        onChange={event => {
+          onChange(event.target.value);
+          onTyping();
+          updateToken(event.target.value, event.target.selectionStart);
+        }}
+        onClick={event => updateToken(value, event.currentTarget.selectionStart)}
+        onBlur={() => window.setTimeout(() => setToken(null), 120)}
+        onKeyDown={event => {
+          if (!token || options.length === 0) return;
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            setActiveIndex(index => (index + 1) % options.length);
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setActiveIndex(index => (index - 1 + options.length) % options.length);
+          } else if (event.key === 'Enter' || event.key === 'Tab') {
+            event.preventDefault();
+            selectTarget(options[activeIndex] || options[0]);
+          } else if (event.key === 'Escape') {
+            setToken(null);
+          }
+        }}
+        placeholder="Nhắn tin hoặc hỏi @b6..."
+        className="w-full bg-zinc-50 border border-zinc-200 rounded-md px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition placeholder-zinc-400"
+      />
+    </div>
+  );
 }
 
 export default function ChatPage() {
@@ -332,12 +455,12 @@ export default function ChatPage() {
                 <div
                   className={`max-w-full rounded-lg px-4 py-2.5 text-sm shadow-sm leading-relaxed ${
                     isMe
-                      ? 'bg-emerald-600 text-white rounded-br-md'
+                      ? 'bg-emerald-700 text-white rounded-br-md'
                       : 'bg-white border border-zinc-200 text-zinc-800 rounded-bl-md'
                   }`}
                 >
                   {msg.kind === 'TASK_REQUEST' && <div className="status status-review" style={{ marginBottom: 6 }}>{aiAction?.status === 'PENDING_CONFIRMATION' ? 'Công việc · Cần xác nhận' : 'Trao đổi công việc'}</div>}
-                  {msg.kind === 'UNCLASSIFIED' && <div className="muted small">AI chưa phân loại được tin nhắn</div>}
+                  {msg.kind === 'UNCLASSIFIED' && <div className={`small font-semibold ${isMe ? 'text-emerald-50' : 'text-zinc-500'}`}>AI chưa phân loại được tin nhắn</div>}
                   <span style={{ display: 'block', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{msg.content}</span>
                 </div>
                 {isMe && receipts.some(r => r.userId !== userMe?.id && (r.createdAt > msg.createdAt || (r.createdAt === msg.createdAt && r.messageId >= msg.id))) && <p className="text-xs text-zinc-500 mt-1">Đã đọc: {receipts.filter(r => r.userId !== userMe?.id && (r.createdAt > msg.createdAt || (r.createdAt === msg.createdAt && r.messageId >= msg.id))).map(r => r.fullName).join(', ')}</p>}
@@ -356,16 +479,14 @@ export default function ChatPage() {
 
         <div className="border-t border-zinc-200 bg-white">
           {sendError && <div className="px-4 pt-3 text-xs font-semibold text-red-600">{sendError}</div>}
-          <div className="px-4 pt-3 flex flex-wrap items-center gap-2"><select aria-label="Tag thành viên" className="filter-select" value="" disabled={loadingMsg || !activeConv} onChange={event => { if (event.target.value === 'b6') { setInputContent(text => text + (text && !text.endsWith(' ') ? ' ' : '') + '@b6 '); return; } const member = activeConv?.members.find((m: any) => m.id === event.target.value); if (member) { setMentionIds(ids => Array.from(new Set([...ids, member.id]))); setInputContent(text => text + (text && !text.endsWith(' ') ? ' ' : '') + '@' + member.fullName + ' '); } }}><option value="">@ Nhắc đến</option><option value="b6">b6</option>{activeConv?.members.filter((m: any) => m.id !== userMe?.id).map((m: any) => <option key={m.id} value={m.id}>{m.fullName}</option>)}</select>{mentionIds.filter(id => inputContent.includes('@' + activeConv?.members.find((m: any) => m.id === id)?.fullName)).map(id => <span key={id} className="status status-active">@{activeConv?.members.find((m: any) => m.id === id)?.fullName}</span>)}</div>
           <form onSubmit={handleSendMessage} className="p-4 flex items-center gap-3">
-            <input
-              type="text"
-              aria-label="Nội dung tin nhắn"
-              disabled={loadingMsg}
+            <MentionInput
               value={inputContent}
-              onChange={(e) => handleTyping(e.target.value)}
-              placeholder="Nhắn tin hoặc hỏi @b6..."
-              className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200 rounded-md px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition placeholder-zinc-400"
+              members={activeConv?.members?.filter((m: any) => m.id !== userMe?.id) || []}
+              disabled={loadingMsg || !activeConv}
+              onChange={setInputContent}
+              onMention={id => setMentionIds(ids => Array.from(new Set([...ids, id])))}
+              onTyping={() => { if (activeConv && socketRef.current?.connected) socketRef.current.emit('typing', { conversationId: activeConv.id }); }}
             />
             <button
               type="submit"

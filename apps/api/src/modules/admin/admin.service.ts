@@ -32,7 +32,8 @@ export class AdminService {
       db.attendanceAdjustment.count({ where: { orgId, status: 'PENDING' } })
     ]);
 
-    return { users, teams, projects, pendingAdjustments };
+    const usage = await db.aiTokenUsage.aggregate({ where: { orgId }, _sum: { inputTokens: true, cachedInputTokens: true, outputTokens: true }, _count: true, _min: { createdAt: true } });
+    return { users, teams, projects, pendingAdjustments, tokenUsage: { ...usage._sum, requests: usage._count, since: usage._min.createdAt } };
   }
 
   async createUser(orgId: string, dto: { email: string; fullName: string; password?: string; systemRole?: string }) {

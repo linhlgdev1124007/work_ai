@@ -24,6 +24,7 @@ model Organization {
   attendanceSessions    AttendanceSession[]
   attendanceAdjustments AttendanceAdjustment[]
   aiRuns                AiRun[]
+  aiTokenUsage          AiTokenUsage[]
   aiActions             AiAction[]
   auditEvents           AuditEvent[]
   notifications         Notification[]
@@ -417,6 +418,19 @@ model TaskAttachment {
 }
 
 // 8. VERTEX AI & ACTIONS
+model AiTokenUsage {
+  id                String @id @default(uuid())
+  orgId             String
+  model             String
+  inputTokens       Int
+  cachedInputTokens Int
+  outputTokens      Int
+  createdAt         DateTime @default(now())
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+}
+
 model AiRun {
   id                String   @id @default(uuid())
   orgId             String

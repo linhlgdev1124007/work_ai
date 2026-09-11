@@ -74,7 +74,7 @@ export class AiQueueService {
           task: publicData(aiResult.executedTask)
         });
         if (aiResult.executedTask) {
-          emitTaskEvent(io, 'task.created', aiResult.executedTask);
+          emitTaskEvent(io, aiResult.aiAction?.intent === 'CREATE_TASK' ? 'task.created' : 'task.updated', aiResult.executedTask);
         }
       }
     } catch (error) {

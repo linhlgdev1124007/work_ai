@@ -2,7 +2,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Building2, KeyRound, Plus, ShieldCheck, Users } from 'lucide-react';
+import { Building2, Cpu, KeyRound, Plus, RotateCw, ShieldCheck, Users } from 'lucide-react';
+
+function formatNumber(value: number | null | undefined) {
+  return typeof value === 'number' ? value.toLocaleString('vi-VN') : '0';
+}
 
 export default function AdminPage() {
   const [overview, setOverview] = useState<any>(null);
@@ -16,9 +20,7 @@ export default function AdminPage() {
     try {
       const res = await api.admin.getOverview();
       setOverview(res.data);
-      if (!projectForm.teamId && res.data.teams?.[0]?.id) {
-        setProjectForm(prev => ({ ...prev, teamId: res.data.teams[0].id }));
-      }
+      setProjectForm(prev => !prev.teamId && res.data.teams?.[0]?.id ? { ...prev, teamId: res.data.teams[0].id } : prev);
     } catch (e: any) {
       setError(e.message || 'Không tải được dữ liệu quản trị');
     }
@@ -110,6 +112,35 @@ export default function AdminPage() {
           Mật khẩu tạm vừa tạo: {temporaryPassword}
         </div>
       )}
+
+      <section className="bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-zinc-200 flex items-center justify-between gap-3">
+          <div className="font-bold text-zinc-900 flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-emerald-600" />
+            Thống kê token AI
+          </div>
+          <button type="button" className="btn btn-ghost" aria-label="Tải lại thống kê token" title="Tải lại" onClick={loadOverview}>
+            <RotateCw className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-zinc-100">
+          <div className="p-4">
+            <div className="text-xs font-bold uppercase text-zinc-500">Input không cache</div>
+            <div className="text-2xl font-black text-zinc-950 mt-1">{formatNumber(overview?.tokenUsage?.inputTokens)}</div>
+          </div>
+          <div className="p-4">
+            <div className="text-xs font-bold uppercase text-zinc-500">Output</div>
+            <div className="text-2xl font-black text-zinc-950 mt-1">{formatNumber(overview?.tokenUsage?.outputTokens)}</div>
+          </div>
+          <div className="p-4">
+            <div className="text-xs font-bold uppercase text-zinc-500">Input cache</div>
+            <div className="text-2xl font-black text-emerald-700 mt-1">{formatNumber(overview?.tokenUsage?.cachedInputTokens)}</div>
+          </div>
+        </div>
+        <div className="px-4 pb-4 text-xs text-zinc-500">
+          {overview?.tokenUsage?.since ? `Đã ghi nhận ${formatNumber(overview.tokenUsage.requests)} lượt gọi AI từ ${new Date(overview.tokenUsage.since).toLocaleString('vi-VN')}.` : 'Chưa có dữ liệu token thực tế được ghi nhận.'}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <section className="xl:col-span-2 bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">

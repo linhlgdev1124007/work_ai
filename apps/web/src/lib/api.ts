@@ -110,7 +110,7 @@ export const api = {
     getWhoIsDoingWhat: (teamId?: string) => fetchApi(`/current-work/who-is-doing-what${teamId ? `?teamId=${teamId}` : ''}`)
   },
   ai: {
-    confirmAction: (id: string, resolution?: { mode: 'create' | 'update'; taskId?: string; expectedVersion?: number; title?: string }) => fetchApi(`/ai/actions/${id}/confirm`, { method: 'POST', body: JSON.stringify({ resolution }) }),
+    confirmAction: (id: string, resolution?: { mode: 'create' | 'update'; taskId?: string; expectedVersion?: number; title?: string; description?: string }) => fetchApi(`/ai/actions/${id}/confirm`, { method: 'POST', body: JSON.stringify({ resolution }) }),
     cancelAction: (id: string) => fetchApi(`/ai/actions/${id}/cancel`, { method: 'POST' }),
     undoAction: (id: string) => fetchApi(`/ai/actions/${id}/undo`, { method: 'POST' }),
     query: (question: string) => fetchApi('/ai/query', { method: 'POST', body: JSON.stringify({ question }) })

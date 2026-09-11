@@ -6,7 +6,7 @@ const classification = z.object({
   evidence: z.string().optional(),
   reply_markdown: z.string().max(12000).optional(),
   duplicate_task_ids: z.array(z.string()).max(5).optional(),
-  data: z.object({ title: z.string().max(500).optional(), assignee_name: z.string().optional(), task_id: z.string().optional(), deadline_iso: z.string().datetime({ offset: true }).nullable().optional(), priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional(), status: z.enum(['TODO', 'IN_PROGRESS', 'WAITING', 'REVIEW', 'COMPLETED', 'PAUSED']).optional(), current_work_text: z.string().optional() })
+  data: z.object({ description: z.string().max(5000).optional(), confirmation_message_id: z.string().optional(), title: z.string().max(500).optional(), assignee_name: z.string().optional(), task_id: z.string().optional(), deadline_iso: z.string().datetime({ offset: true }).nullable().optional(), priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional(), status: z.enum(['TODO', 'IN_PROGRESS', 'WAITING', 'REVIEW', 'COMPLETED', 'PAUSED']).optional(), current_work_text: z.string().optional() })
 });
 
 export function parseClassification(raw: string) {
