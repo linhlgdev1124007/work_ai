@@ -420,6 +420,7 @@ Không chỉ dựa vào từ khóa làm/xong/deadline hoặc @tag. Câu vui có 
     }
 
     const payload = JSON.parse(action.patchPayload);
+    const deadline = normalizeDeadlineIso(payload.deadline_iso);
     let task = null;
 
     if (action.intent === AiIntent.CREATE_TASK) {
@@ -443,7 +444,7 @@ Không chỉ dựa vào từ khóa làm/xong/deadline hoặc @tag. Câu vui có 
           await db.aiAction.update({ where: { id: actionId }, data: { patchPayload: JSON.stringify({ ...payload, duplicates: duplicates.map(t => ({ id: t.id, title: t.title, version: t.version, status: t.status })) }) } });
           return { success: false, task: null, conflict: true };
         }
-        const patch = { title: resolution.title || payload.title, description: resolution.description ?? payload.description, ...(payload.assignee_id ? { assigneeId: payload.assignee_id } : {}), ...(payload.deadline_iso ? { deadline: payload.deadline_iso } : {}), ...(payload.priority ? { priority: payload.priority } : {}) };
+        const patch = { title: resolution.title || payload.title, description: resolution.description ?? payload.description, ...(payload.assignee_id ? { assigneeId: payload.assignee_id } : {}), ...(deadline !== undefined ? { deadline } : {}), ...(payload.priority ? { priority: payload.priority } : {}) };
         await permissionService.assertTaskMutation(user, target.id, patch);
         task = await tasksService.updateTask(target.id, user.userId, UpdateTaskSchema.parse({ ...patch, expectedVersion: resolution.expectedVersion }));
         await db.aiAction.update({ where: { id: actionId }, data: { patchPayload: JSON.stringify({ ...payload, resolution: 'update', title: patch.title, description: patch.description }) } });
@@ -453,7 +454,7 @@ Không chỉ dựa vào từ khóa làm/xong/deadline hoặc @tag. Câu vui có 
         assigneeId: payload.assignee_id || null,
         teamId: payload.team_id || null,
         projectId: payload.project_id || null,
-        deadline: payload.deadline_iso || null,
+        deadline: deadline ?? null,
         priority: payload.priority || TaskPriority.NORMAL,
         sourceMessageId: action.sourceMessageId,
         sourceConversationId: action.conversationId
@@ -462,7 +463,7 @@ Không chỉ dựa vào từ khóa làm/xong/deadline hoặc @tag. Câu vui có 
       const taskId = action.targetEntityId || payload.task_id;
       if (!taskId) throw new Error('Chưa xác định được công việc cần cập nhật.');
       if (!await db.task.findFirst({ where: { id: taskId, orgId: user.orgId, sourceConversationId: action.conversationId, isArchived: false } })) throw new Error('Công việc không thuộc nhóm chat này');
-      const patch = action.intent === AiIntent.UPDATE_STATUS ? { status: payload.status } : action.intent === AiIntent.UPDATE_ASSIGNEE ? { assigneeId: payload.assignee_id } : { deadline: payload.deadline_iso };
+      const patch = action.intent === AiIntent.UPDATE_STATUS ? { status: payload.status } : action.intent === AiIntent.UPDATE_ASSIGNEE ? { assigneeId: payload.assignee_id } : { deadline };
       await permissionService.assertTaskMutation(user, taskId, patch);
       if (Object.values(patch).some(value => value === undefined)) throw new Error('Hành động thiếu dữ liệu cập nhật.');
       task = await tasksService.updateTask(taskId, user.userId, UpdateTaskSchema.parse({ ...patch, expectedVersion: action.expectedVersion }));
@@ -572,4 +573,13 @@ function normalizeTitle(value: string) {
 function statusesVi(status?: string) {
   const labels: Record<string, string> = { TODO: 'Chưa làm', IN_PROGRESS: 'Đang làm', WAITING: 'Đang chờ', REVIEW: 'Chờ duyệt', COMPLETED: 'Hoàn thành', PAUSED: 'Tạm dừng' };
   return status ? labels[status] : undefined;
+}
+
+function normalizeDeadlineIso(value: unknown) {
+  if (value === null) return null;
+  if (value === undefined || value === '') return undefined;
+  if (typeof value !== 'string') throw new Error('Deadline không hợp lệ.');
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error('Deadline không hợp lệ.');
+  return date.toISOString();
 }
