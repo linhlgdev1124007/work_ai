@@ -237,6 +237,10 @@ async function main() {
   const sentAt = new Date('2026-09-11T09:21:02.088Z');
   await db.message.update({ where: { id: seo.id }, data: { createdAt: sentAt } });
   aiService.callVertexGemini = async prompt => {
+    if (JSON.parse(prompt).extracted) {
+      assert.equal(JSON.parse(prompt).extracted.title, 'SEO cho Tuấn'); checks++;
+      return JSON.stringify({ title: 'Hoàn thành công việc SEO cho Tuấn' });
+    }
     assert.equal(JSON.parse(prompt).now, sentAt.toISOString()); checks++;
     return JSON.stringify({ is_work_instruction: true, intent: 'CREATE_TASK', confidence: .98, data: { title: 'SEO cho Tuấn', assignee_name: 'Nguyễn Văn Sang', deadline_iso: '2026-09-12T23:59:59+07:00' } });
   };
@@ -248,6 +252,9 @@ async function main() {
   assert.equal(seoPayload.assignee_id, a.admin.id);
   assert.equal(seoPayload.deadline_iso, '2026-09-12T23:59:59+07:00');
   assert.equal(seoResult.executedTask, null); checks += 6;
+  assert.equal(seoPayload.title, 'Hoàn thành công việc SEO cho Tuấn');
+  assert.equal(seoPayload.extracted_title, 'SEO cho Tuấn');
+  assert.equal(seoPayload.title_refinement_status, 'REFINED'); checks += 3;
   await db.user.update({ where: { id: a.admin.id }, data: { fullName: 'ADMIN' } });
   aiService.callVertexGemini = async () => { throw new Error('Provider unavailable'); };
   const failedClassification = await aiService.processIncomingMessage(messages[0].data.id, conv, a.member.id, messageBody.content, a.org.id);
@@ -318,6 +325,29 @@ async function main() {
   await expectStatus(`/chat/conversations/${conv}/lead`, otherAdmin, 'PATCH', { userId: a.member.id }, 403);
   await expectStatus(`/chat/conversations/${conv}/lead`, admin, 'PATCH', { userId: a.outsider.id }, 400);
   await expectStatus(`/chat/conversations/${conv}/lead`, admin, 'PATCH', { userId: a.member.id }, 200);
+  await expectStatus('/tasks/options', null, 'GET', undefined, 401);
+  const leadOptions = await expectStatus('/tasks/options', member, 'GET', undefined, 200);
+  assert(leadOptions.groups.find(group => group.sourceConversationId === conv)?.canAssign);
+  assert(!leadOptions.groups.some(group => group.sourceConversationId === b.conversation.id));
+  assert.deepEqual(leadOptions.personalAssignees.map(person => person.id), [a.member.id]); checks += 3;
+  const adminOptions = await expectStatus('/tasks/options', admin, 'GET', undefined, 200);
+  assert(adminOptions.personalAssignees.some(person => person.id === a.outsider.id));
+  assert(!adminOptions.personalAssignees.some(person => person.id === b.member.id)); checks += 2;
+  const privateManual = await expectStatus('/tasks', admin, 'POST', { title: 'Manual individual assignment', description: 'Specific brief', assigneeId: a.outsider.id, deadline: '2027-01-01T10:00:00.000Z', priority: 'HIGH' }, 201);
+  await expectStatus(`/tasks/${privateManual.id}`, outsider, 'GET', undefined, 200);
+  await expectStatus(`/tasks/${privateManual.id}`, member, 'GET', undefined, 403);
+  await expectStatus(`/tasks/${privateManual.id}`, otherAdmin, 'GET', undefined, 403);
+  assert.equal(await db.notification.count({ where: { entityId: privateManual.id, userId: a.outsider.id, type: 'TASK_ASSIGNED' } }), 1); checks++;
+  await db.teamMember.update({ where: { teamId_userId: { teamId: a.team.id, userId: a.member.id } }, data: { role: 'LEAD' } });
+  await expectStatus('/tasks', member, 'POST', { title: 'Forbidden team assignment', teamId: a.team.id, assigneeId: a.outsider.id }, 403);
+  const teamManual = await expectStatus('/tasks', member, 'POST', { title: 'Manual team assignment', teamId: a.team.id, assigneeId: a.admin.id }, 201);
+  await expectStatus(`/tasks/${teamManual.id}`, member, 'PATCH', { assigneeId: a.outsider.id }, 403);
+  const leadTaskView = await expectStatus(`/tasks/${teamManual.id}`, member, 'GET', undefined, 200);
+  assert.equal(leadTaskView.canEdit, true); checks++;
+  await db.teamMember.update({ where: { teamId_userId: { teamId: a.team.id, userId: a.member.id } }, data: { role: 'MEMBER' } });
+  const readableTeamTask = await expectStatus('/tasks', admin, 'POST', { title: 'Team readable task', teamId: a.team.id, assigneeId: a.admin.id }, 201);
+  const readOnlyTask = await expectStatus(`/tasks/${readableTeamTask.id}`, member, 'GET', undefined, 200);
+  assert.equal(readOnlyTask.canEdit, false); checks++;
   const groupTask = await expectStatus('/tasks', member, 'POST', { title: 'Banner launch campaign', sourceConversationId: conv, assigneeId: a.admin.id }, 201);
   await expectStatus('/tasks', member, 'POST', { title: 'Outside room', sourceConversationId: conv, assigneeId: a.outsider.id }, 403);
   await expectStatus(`/chat/conversations/${conv}/tasks`, outsider, 'GET', undefined, 403);

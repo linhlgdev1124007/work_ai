@@ -63,4 +63,10 @@ svg { flex-shrink:0; } input,select,textarea { min-width:0; }
 .chat-markdown table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; }
 .chat-markdown th, .chat-markdown td { border: 1px solid #dce1de; padding: 6px 10px; }
 .chat-markdown a, .chat-action a { color: #087b65; text-decoration: underline; }
+.task-toolbar { flex-wrap: wrap; gap: 12px; }
+.task-toolbar .filters { flex: 1; min-width: 0; flex-wrap: wrap; }
+.task-toolbar .filter-select { min-width: 0; max-width: 220px; }
+.task-toolbar .search-field { max-width: 100%; }
+.field textarea { width: 100%; min-width: 0; resize: vertical; }
+@media(max-width:760px) { .task-toolbar .filters { flex-basis: 100%; } .task-toolbar .filter-select { flex: 1 1 140px; max-width: 100%; } .task-toolbar .search-field { flex-basis: 100%; } .task-toolbar .search-field input { width: 100%; min-width: 0; } }
 .chat-markdown blockquote { border-left: 3px solid #c7d7d0; padding-left: 12px; color: #59675f; }

@@ -8,6 +8,14 @@ import { emitTaskEvent } from '../../services/realtime.service';
 
 export const tasksRouter = Router();
 
+tasksRouter.get('/options', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    return res.json({ success: true, data: await tasksService.getOptions(req.user!) });
+  } catch {
+    return res.status(500).json({ success: false, error: { message: 'Không thể tải danh sách người phụ trách' } });
+  }
+});
+
 // Lấy danh sách việc cho trang "Hôm nay"
 tasksRouter.get('/today', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -64,7 +72,10 @@ tasksRouter.get('/:id', authMiddleware, async (req: Request, res: Response) => {
     if (!task) {
       return res.status(404).json({ success: false, error: { message: 'Không tìm thấy task' } });
     }
-    return res.status(200).json({ success: true, data: task });
+    let canEdit = true;
+    try { await permissionService.assertTaskMutation(req.user!, req.params.id); }
+    catch (error: any) { if (error.statusCode !== 403) throw error; canEdit = false; }
+    return res.status(200).json({ success: true, data: { ...task, canEdit } });
   } catch (error: any) {
     return res.status(error.statusCode || (error.code === 'P2025' ? 409 : 500)).json({ success: false, error: { message: error.code?.startsWith('P') ? 'Data conflict or invalid reference' : error.message } });
   }

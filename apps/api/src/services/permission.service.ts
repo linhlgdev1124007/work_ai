@@ -112,6 +112,7 @@ export class PermissionService {
     const roomLead = task.sourceConversationId ? await this.isConversationLead(user.userId, task.sourceConversationId) : false;
     if (roomLead && patch?.assigneeId && !await db.conversationMember.findFirst({ where: { conversationId: task.sourceConversationId!, userId: patch.assigneeId } })) throw new ForbiddenError('Chỉ phân việc cho thành viên nhóm chat');
     const isLead = roomLead || (task.teamId ? await this.isTeamLead(user.userId, task.teamId) : false);
+    if (!roomLead && isLead && patch?.assigneeId && task.teamId && !await db.teamMember.findFirst({ where: { teamId: task.teamId, userId: patch.assigneeId } })) throw new ForbiddenError('Chỉ phân việc cho thành viên team');
     const isOwner = task.assigneeId === user.userId || task.creatorId === user.userId;
     if (!isOwner && !isLead) {
       throw new ForbiddenError('Bạn không có quyền cập nhật công việc này');
@@ -161,6 +162,7 @@ export class PermissionService {
     if (dto.assigneeId && dto.assigneeId !== user.userId) {
       const canAssign = dto.teamId ? await this.isTeamLead(user.userId, dto.teamId) : false;
       if (!canAssign) throw new ForbiddenError('Thành viên chỉ được tạo công việc cho chính mình');
+      if (!await db.teamMember.findFirst({ where: { teamId: dto.teamId!, userId: dto.assigneeId } })) throw new ForbiddenError('Chỉ phân việc cho thành viên team');
     }
   }
 

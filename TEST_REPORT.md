@@ -6,8 +6,8 @@ Date: 2026-09-11. Environment: Windows host, Docker Linux containers, PostgreSQL
 
 | Check | Result |
 | --- | --- |
-| Real HTTP / PostgreSQL / Socket.IO integration | 274 checks passed |
-| Service, rule-parser, context, notification and classification tests | 110 passed, 1 live-AI test excluded |
+| Real HTTP / PostgreSQL / Socket.IO integration | 299 checks passed |
+| Service, rule-parser, context, notification and classification tests | 117 passed, 1 live-AI test excluded |
 | Playwright desktop and mobile | 47 passed; mobile-only scenario excluded on desktop |
 | Service worker simulated push without open tabs / safe click targets | 13 checks passed |
 | Real Windows Chrome provider-to-Service-Worker push with site tab closed | Passed; browser running, native OS banner not visually verified |
@@ -21,6 +21,8 @@ Date: 2026-09-11. Environment: Windows host, Docker Linux containers, PostgreSQL
 
 ## API Coverage
 
+- Context-aware titles: after validated CREATE_TASK extraction, a separate editor step receives the extracted title, original message, room/team/project names, up to 4000 recent-context characters and 20 scoped task titles/statuses. Only a single-line title of 3-160 characters is accepted; other fields cannot be changed. Invalid/unavailable editing preserves the original proposal. The payload records extracted_title and title_refinement_status. Duplicate checks retain both original and refined titles. Seven new unit tests and the real-database integration cover editing, fallback and unchanged assignee/deadline/confirmation requirements.
+- Manual assignment: authenticated task options expose scoped groups and minimal active-member profiles. Admins can assign individual tasks organization-wide; leads assign within their managed chat group/team. New checks cover options isolation, personal-task privacy, one assignment notification, lead creation/read access, read-only details and out-of-team create/reassignment rejection. Lead status does not grant access to another member's unrelated private tasks or other inaccessible groups.
 - Classification incident: the reported SEO assignment had a FAILED AiRun containing truncated JSON after `confidence: 0`, despite the model already selecting CREATE_TASK. The Vertex adapter now disables thinking for supported Flash 2.5 names, reserves 2048 output tokens for JSON, retries MAX_TOKENS once at 4096, requires a complete STOP response, and concatenates only non-thought text parts. Six adapter regression tests cover those boundaries. Provider configuration reference: https://cloud.google.com/vertex-ai/generative-ai/docs/thinking.
 - Relative dates now use the source message timestamp, not the retry time. The prompt distinguishes future completion requests from completed-work reports, the assignee from the beneficiary, and clear work clauses from accompanying jokes. A date without an hour is proposed as 23:59:59 in Asia/Ho_Chi_Minh, still requiring confirmation. No date means no invented deadline. Invalid classification errors are retained in AiRun for diagnosis.
 - The exact reported message was reprocessed with real Vertex and now has one PENDING_CONFIRMATION CREATE_TASK proposal: SEO cho Tuan, assigned to Sang, deadline 2026-09-12T23:59:59+07:00. No task was created or confirmed. The other earlier failed message was not replayed to avoid a second proposal for the same request. Automated integration separately verifies the exact phrase, assignee binding, source-date anchoring and no automatic mutation with controlled model output.

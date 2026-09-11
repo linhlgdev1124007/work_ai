@@ -76,6 +76,7 @@ export const api = {
     bootstrap: () => fetchApi('/auth/me/bootstrap')
   },
   tasks: {
+    getOptions: () => fetchApi('/tasks/options'),
     getToday: () => fetchApi('/tasks/today'),
     getAll: (params?: Record<string, any>) => {
       const q = params ? '?' + new URLSearchParams(params).toString() : '';

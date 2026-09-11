@@ -1,11 +1,27 @@
 import { db } from '../../services/db.service';
 import { CreateTaskDto, UpdateTaskDto, TaskStatus, TaskPriority } from '@work-ai/shared';
 import { Prisma } from '@work-ai/database';
+import { permissionService } from '../../services/permission.service';
 
 type TaskResult = Prisma.TaskGetPayload<{ include: { assignee: true; creator: true; team: true; project: true } }> & { isOverdue: boolean };
 
 export class TasksService {
   constructor(private client: Prisma.TransactionClient = db) {}
+
+  async getOptions(user: { userId: string; orgId: string; systemRole: string }) {
+    const admin = permissionService.isAdmin(user);
+    const person = { id: true, fullName: true } as const;
+    const [rooms, teams, users] = await Promise.all([
+      db.conversation.findMany({ where: { orgId: user.orgId, ...(admin ? {} : { members: { some: { userId: user.userId } } }) }, select: { id: true, name: true, teamId: true, projectId: true, members: { where: { user: { status: 'ACTIVE' } }, select: { userId: true, role: true, user: { select: person } } } }, orderBy: { name: 'asc' } }),
+      db.team.findMany({ where: { orgId: user.orgId, ...(admin ? {} : { members: { some: { userId: user.userId } } }) }, select: { id: true, name: true, members: { where: { user: { status: 'ACTIVE' } }, select: { userId: true, role: true, user: { select: person } } } }, orderBy: { name: 'asc' } }),
+      db.user.findMany({ where: { orgId: user.orgId, status: 'ACTIVE', ...(admin ? {} : { id: user.userId }) }, select: person, orderBy: { fullName: 'asc' } })
+    ]);
+    const groups = [
+      ...rooms.map(room => ({ id: `room:${room.id}`, name: room.name, type: 'ROOM', sourceConversationId: room.id, teamId: room.teamId, projectId: room.projectId, canAssign: admin || room.members.some(member => member.userId === user.userId && member.role === 'LEAD'), members: room.members.map(member => member.user) })),
+      ...teams.map(team => ({ id: `team:${team.id}`, name: team.name, type: 'TEAM', sourceConversationId: null, teamId: team.id, projectId: null, canAssign: admin || team.members.some(member => member.userId === user.userId && member.role === 'LEAD'), members: team.members.map(member => member.user) }))
+    ];
+    return { canAssignPersonal: admin, personalAssignees: users, groups };
+  }
   /**
    * Tính toán cờ isOverdue cho một Task
    */

@@ -126,6 +126,25 @@ The cases distinguish assignments (including informal/mixed social wording),
 social invitations, negation, completion reports and progress questions. This
 small live regression is not a guarantee of model accuracy for every message.
 
+## Task Assignment
+
+The Tasks page supports manual creation with an assignee, optional managed group,
+description, deadline, priority and completion review. Use the group and assignee
+filters to inspect work. Admins see organization-wide tasks. Leads see tasks in
+their accessible managed groups/teams, not unrelated private member tasks. A
+lead must select the managed group to assign another member; standalone personal
+assignments to others are administrator-only. Ordinary members can create their
+own personal tasks. Group task visibility for existing members is unchanged.
+View-only details hide save/checklist mutation controls; API authorization is
+still enforced independently of the interface.
+
+New AI CREATE_TASK proposals have a context-aware title editing step after
+extraction. The editor cannot alter assignment, deadline or intent. The user can
+edit the proposed title before confirmation. Existing tasks and pending proposals
+are not renamed automatically. If title editing is unavailable, the validated
+extracted title is retained. The extra context is bounded; it is not a claim
+that the model has read every historical task.
+
 ## Deployment Checks
 
 Use HTTPS and COOKIE_SECURE=true outside localhost. Set WEB_URL and CORS_ORIGINS
