@@ -1,0 +1,587 @@
+Tôi muốn xây dựng một **ứng dụng quản lý công việc nhóm có AI làm trung tâm**, kết hợp giữa **chat nội bộ + giao việc + quản lý task + theo dõi tiến độ**.
+
+Hiện tại team của tôi chủ yếu dùng **Zalo để trao đổi và phân công công việc**. Cách này nhanh khi chat nhưng có rất nhiều vấn đề:
+
+* Task rất dễ bị trôi trong tin nhắn.
+* Nhân viên có thể quên hoặc bỏ sót công việc.
+* Muốn tìm lại một task đã giao trước đó mất rất nhiều thời gian.
+* Không biết chính xác ai đang làm gì.
+* Không biết một người hiện còn bao nhiêu task.
+* Không kiểm soát được task nào đang làm, chưa làm, đã hoàn thành hoặc bị trễ deadline.
+* Khi đổi người phụ trách, thay đổi deadline hoặc chỉnh yêu cầu thì thông tin dễ bị thất lạc.
+* Quản lý phải hỏi từng người: “Đang làm gì?”, “Task đó tới đâu rồi?”, “Xong chưa?”.
+* Cuối ngày hoặc cuối tuần rất khó thống kê ai đã làm những gì.
+
+Tôi muốn giải quyết toàn bộ vấn đề trên nhưng **không muốn tạo ra một phần mềm quản lý dự án quá phức tạp**.
+
+## Mục tiêu quan trọng nhất
+
+Ứng dụng phải:
+
+1. **Cực kỳ dễ sử dụng.**
+2. **Giao việc nhanh như nhắn Zalo.**
+3. Không bắt người dùng phải điền quá nhiều form.
+4. AI tự động hiểu nội dung cuộc trò chuyện và biến nó thành dữ liệu quản lý.
+5. Giảm tối đa tình trạng quên task, miss task và trễ task.
+6. Giúp quản lý nhìn vào là biết ngay:
+
+   * Ai đang làm gì?
+   * Ai đang rảnh?
+   * Ai đang có quá nhiều việc?
+   * Task nào sắp tới deadline?
+   * Task nào đang trễ?
+   * Task nào chưa có người xử lý?
+7. Giúp nhân viên mở app lên là biết ngay **hôm nay mình cần làm gì**.
+
+---
+
+# 1. Chat là trung tâm của ứng dụng
+
+Tôi muốn trải nghiệm sử dụng giống các app chat như Zalo/Slack/Messenger.
+
+Mọi người có thể:
+
+* nhắn tin;
+* gửi hình ảnh;
+* gửi file;
+* gửi link;
+* tag thành viên;
+* reply tin nhắn;
+* trao đổi về công việc;
+* giao việc ngay trong cuộc trò chuyện.
+
+Điểm khác biệt là **AI sẽ đọc và hiểu ngữ cảnh của cuộc trò chuyện**.
+
+Ví dụ:
+
+> “Sang làm giúp tôi banner Halloween cho Jeminise, hoàn thành trước 5 giờ chiều mai.”
+
+AI phải hiểu:
+
+* Task: Làm banner Halloween cho Jeminise
+* Người phụ trách: Sang
+* Deadline: 17:00 ngày mai
+* Người giao việc
+* Project/Team liên quan
+* Tin nhắn nguồn
+
+Sau đó AI tự động tạo task.
+
+AI có thể note ngay bên dưới tin nhắn:
+
+**AI: Đã tạo task “Banner Halloween Jeminise” → Sang · Deadline: 17:00 ngày mai.**
+
+Không cần người dùng phải mở form “Create Task” rồi nhập từng trường.
+
+---
+
+# 2. AI phải hiểu thay đổi trong hội thoại
+
+AI không chỉ tạo task mà còn phải hiểu các thay đổi sau đó.
+
+Ví dụ task ban đầu giao cho Hy.
+
+Sau đó tôi nhắn:
+
+> “Thôi, việc này đưa Sang làm đi.”
+
+AI phải hiểu “việc này” đang nói tới task nào dựa trên ngữ cảnh.
+
+Sau đó AI tự động cập nhật:
+
+**AI Note:**
+Task “XXX” đã được chuyển từ **Hy → Sang**.
+
+Nếu tôi nói:
+
+> “Deadline dời sang thứ Hai nhé.”
+
+AI cập nhật deadline.
+
+Nếu tôi nói:
+
+> “Cái này xong rồi.”
+
+AI có thể hiểu task tương ứng và chuyển trạng thái sang **Completed**.
+
+Nếu tôi nói:
+
+> “Tạm dừng task này.”
+
+AI chuyển sang **Paused**.
+
+Nếu tôi nói:
+
+> “Sang làm phần ảnh, Lợi làm phần video.”
+
+AI có thể tạo subtask hoặc chia trách nhiệm phù hợp.
+
+---
+
+# 3. AI phải hoạt động như một thư ký quản lý công việc
+
+Tôi muốn có thể nhắn trực tiếp với AI bằng ngôn ngữ tự nhiên.
+
+Ví dụ:
+
+> “Hôm nay Sang còn việc gì?”
+
+AI trả lời danh sách task của Sang.
+
+> “Có task nào đang trễ không?”
+
+AI liệt kê các task trễ.
+
+> “Ai đang nhiều việc nhất?”
+
+AI phân tích workload.
+
+> “Lợi đang làm gì?”
+
+AI trả lời các task Lợi đang thực hiện.
+
+> “Hôm nay tôi cần làm gì?”
+
+AI tổng hợp task của tôi theo mức độ ưu tiên.
+
+> “Những việc nào cần hoàn thành hôm nay?”
+
+AI đưa danh sách.
+
+> “Tuần này team Social làm được những gì?”
+
+AI tổng hợp báo cáo.
+
+> “Task banner Halloween tới đâu rồi?”
+
+AI tìm đúng task và đưa trạng thái, người phụ trách, deadline, lịch sử thay đổi và trao đổi liên quan.
+
+---
+
+# 4. Mỗi thành viên phải có trạng thái “Tôi đang làm gì?”
+
+Tôi muốn trong hệ thống có một cơ chế cực nhanh để mỗi người cập nhật công việc hiện tại.
+
+Ví dụ:
+
+**Lợi đang làm:**
+→ Edit video Wrydeco
+
+**Sang đang làm:**
+→ Fix UI Jeminise PDP
+
+**Hy đang làm:**
+→ Upload sản phẩm Chillgen
+
+Người dùng có thể chỉ cần nhắn:
+
+> “Tui đang làm video Wrydeco.”
+
+AI tự note trạng thái hiện tại.
+
+Khi người đó chuyển sang task khác:
+
+> “Xong video rồi, giờ làm banner Chillgen.”
+
+AI có thể:
+
+1. đánh dấu hoặc đề xuất đánh dấu task video đã xong;
+2. cập nhật trạng thái:
+   **Đang làm: Banner Chillgen**.
+
+Tôi muốn có một màn hình để nhìn nhanh toàn bộ team:
+
+| Thành viên | Đang làm gì        | Task còn lại | Deadline gần nhất | Task trễ |
+| ---------- | ------------------ | -----------: | ----------------- | -------: |
+| Sang       | Fix Jeminise PDP   |            4 | 16:00 hôm nay     |        0 |
+| Lợi        | Edit Wrydeco Video |            6 | 18:00 hôm nay     |        1 |
+| Hy         | Upload Chillgen    |            3 | Ngày mai          |        0 |
+
+Mục tiêu là không cần nhắn từng người hỏi “đang làm gì?”.
+
+---
+
+# 5. Hệ thống Task
+
+Mỗi task nên có đủ thông tin chuyên nghiệp nhưng giao diện phải gọn.
+
+Có thể bao gồm:
+
+* Task name
+* Description
+* Assignee
+* Người giao việc
+* Team
+* Project
+* Priority
+* Status
+* Start date
+* Deadline
+* Estimate time
+* Attachments
+* Images
+* Links
+* Checklist
+* Subtasks
+* Comments
+* Conversation liên quan
+* Activity history
+* Created by AI / Created manually
+* Ngày hoàn thành
+* Thời gian trễ
+
+Các trạng thái cơ bản:
+
+* To Do
+* In Progress
+* Waiting
+* Review
+* Completed
+* Overdue
+* Paused
+
+Không nên có quá nhiều trạng thái khiến người dùng khó sử dụng.
+
+---
+
+# 6. Dashboard quản lý
+
+Tôi muốn dashboard nhìn vào là hiểu tình trạng team ngay.
+
+Các số liệu quan trọng:
+
+* Tổng số task
+* Task đang làm
+* Task chưa làm
+* Task đã hoàn thành
+* Task đang review
+* Task bị trễ
+* Task sắp tới deadline
+* Task chưa có người phụ trách
+
+Có thể xem theo:
+
+* hôm nay;
+* tuần này;
+* tháng này;
+* từng team;
+* từng project;
+* từng thành viên.
+
+---
+
+# 7. Dashboard từng nhân viên
+
+Mỗi người có trang riêng:
+
+## Today
+
+Những việc phải làm hôm nay.
+
+## Doing
+
+Đang làm gì.
+
+## Upcoming
+
+Task sắp tới.
+
+## Overdue
+
+Task bị trễ.
+
+## Completed
+
+Các task đã hoàn thành.
+
+Tôi muốn nhân viên không phải mở nhiều màn hình.
+
+Mở app lên là biết:
+
+**“Hôm nay tôi phải làm gì tiếp theo?”**
+
+---
+
+# 8. Timeline / Activity Log
+
+Mỗi task cần có lịch sử rõ ràng.
+
+Ví dụ:
+
+10:21 — Hy tạo task
+10:22 — AI giao task cho Lợi
+11:35 — Lợi bắt đầu làm
+14:10 — Deadline đổi từ 15:00 → 17:00
+14:12 — Task chuyển từ Lợi → Sang
+16:34 — Sang gửi file
+16:45 — Task chuyển sang Review
+17:02 — Approved
+17:02 — Completed
+
+Điều này giúp sau này không phải tìm lại hàng trăm tin nhắn.
+
+---
+
+# 9. AI phải tránh tự ý làm sai
+
+Đây là điểm rất quan trọng.
+
+AI phải phân biệt:
+
+### Trường hợp chắc chắn
+
+Ví dụ:
+
+> “Giao task này cho Sang.”
+
+→ AI có thể thực hiện.
+
+### Trường hợp chưa chắc chắn
+
+Ví dụ:
+
+> “Hay để Sang làm cái này nhỉ?”
+
+Đây có thể chỉ là thảo luận.
+
+AI không nên tự ý chuyển task.
+
+AI có thể hỏi hoặc đưa đề xuất:
+
+**AI:** Có phải bạn muốn chuyển task “XXX” từ Hy sang Sang không?
+
+[Confirm] [Cancel]
+
+Tôi muốn hệ thống AI vừa thông minh nhưng không được tự ý thay đổi dữ liệu quan trọng khi ngữ cảnh chưa rõ.
+
+---
+
+# 10. Reminder thông minh
+
+Hệ thống có thể tự nhắc:
+
+* task sắp deadline;
+* task đã quá deadline;
+* task lâu không có update;
+* task đang Waiting quá lâu;
+* task chưa có assignee;
+* nhân viên có quá nhiều task;
+* task phụ thuộc một task khác nhưng task trước chưa hoàn thành.
+
+Ví dụ:
+
+**AI:** Task “Halloween Banner” còn 2 giờ tới deadline nhưng chưa có cập nhật trong 5 giờ qua.
+
+Không spam notification quá nhiều.
+
+Chỉ nhắc những thứ thực sự quan trọng.
+
+---
+
+# 11. Team / Department
+
+Hiện tại tôi có thể có các team như:
+
+* Social
+* Web
+* Product
+* Tool
+
+Mỗi team có:
+
+* Team Lead / PIC
+* Members
+* Projects
+* Tasks
+* Dashboard riêng
+
+Lead có thể giao việc cho thành viên.
+
+Admin có thể xem toàn bộ hệ thống.
+
+---
+
+# 12. Thống kê hiệu suất
+
+Tôi muốn hệ thống thống kê được:
+
+Theo từng người:
+
+* số task được giao;
+* số task hoàn thành;
+* số task đang làm;
+* số task trễ;
+* tỷ lệ hoàn thành đúng deadline;
+* thời gian trung bình hoàn thành task;
+* workload hiện tại.
+
+Theo team:
+
+* task completed;
+* overdue;
+* workload;
+* tốc độ hoàn thành;
+* backlog.
+
+Tuy nhiên hệ thống không nên biến thành công cụ gây áp lực nhân viên.
+
+Mục tiêu chính là **quản lý workload và tránh bỏ sót việc**.
+
+---
+
+# 13. Search phải cực mạnh
+
+Một trong những vấn đề lớn nhất của Zalo là tìm lại thông tin rất khó.
+
+Tôi muốn có Universal Search.
+
+Có thể tìm:
+
+* task;
+* tin nhắn;
+* file;
+* hình ảnh;
+* link;
+* project;
+* người;
+* keyword.
+
+Đặc biệt có thể hỏi AI:
+
+> “Tìm cái task Sang làm banner Halloween Jeminise tuần trước.”
+
+AI phải tìm được dù tôi không nhớ chính xác tên task.
+
+---
+
+# 14. UX philosophy
+
+Đây là yêu cầu rất quan trọng.
+
+Tôi **không muốn một ứng dụng giống Jira** với rất nhiều menu, field, nút và quy trình phức tạp.
+
+Tôi muốn philosophy là:
+
+**Chat first → AI understands → Task automatically structured.**
+
+Người dùng càng ít thao tác càng tốt.
+
+Ví dụ giao task lý tưởng:
+
+Không phải:
+
+Create Task
+→ nhập title
+→ nhập description
+→ chọn member
+→ chọn project
+→ chọn deadline
+→ chọn priority
+→ Save
+
+Mà chỉ cần:
+
+> “Sang làm video này cho Jeminise nhé, mai gửi tôi review.”
+
+AI tự hiểu và tạo task.
+
+---
+
+# 15. Mobile-first / tốc độ sử dụng
+
+Ứng dụng cần sử dụng tốt cả:
+
+* Desktop Web
+* Mobile Web
+* Mobile App sau này
+
+Các hành động phổ biến phải thực hiện cực nhanh:
+
+* giao task;
+* xem task;
+* báo đang làm;
+* báo hoàn thành;
+* gửi ảnh;
+* comment;
+* đổi người phụ trách;
+* đổi deadline.
+
+---
+
+# 16. Tôi muốn bạn phân tích và thiết kế sản phẩm này
+
+Hãy đóng vai:
+
+* Product Manager
+* UX Designer
+* System Architect
+* AI Product Architect
+* CTO
+
+Phân tích thật kỹ ý tưởng trên và đề xuất một sản phẩm hoàn chỉnh.
+
+Hãy trình bày:
+
+1. **Product Vision**
+2. Vấn đề hiện tại của workflow dùng Zalo
+3. Core value proposition của sản phẩm
+4. Đối tượng người dùng
+5. Các role và permission
+6. Kiến trúc tính năng tổng thể
+7. User flow chính
+8. Chat → AI → Task flow
+9. Task management system
+10. AI Context Engine hoạt động như thế nào
+11. Cách AI nhận diện:
+
+* tạo task;
+* đổi assignee;
+* đổi deadline;
+* complete task;
+* tạo subtask;
+* update trạng thái.
+
+12. Cách xử lý AI confidence và confirmation
+13. Dashboard Admin
+14. Dashboard Team Lead
+15. Dashboard Member
+16. “Who is doing what” dashboard
+17. Notification & Reminder System
+18. Search System
+19. Activity / Audit Log
+20. File & attachment management
+21. Analytics & Reporting
+22. Database schema đề xuất
+23. Backend architecture
+24. Frontend architecture
+25. AI architecture
+26. Realtime chat architecture
+27. Permission system
+28. Notification architecture
+29. UX/UI structure
+30. Sidebar/menu nên có những gì
+31. Thiết kế từng màn hình chính
+32. Mobile UX
+33. MVP nên gồm những chức năng nào
+34. Những tính năng nào chưa nên làm ở MVP
+35. Phase 2
+36. Phase 3
+37. Những rủi ro lớn nhất của sản phẩm
+38. Cách tránh ứng dụng trở nên quá phức tạp
+39. Các edge case AI dễ hiểu sai
+40. Đề xuất technology stack phù hợp.
+
+Cuối cùng, hãy giúp tôi đưa ra một **blueprint hoàn chỉnh của sản phẩm**, sao cho đội developer có thể đọc và bắt đầu thiết kế database, UI và architecture.
+
+Nguyên tắc xuyên suốt:
+
+> **Nhanh hơn Zalo trong việc giao việc, nhưng quản lý task tốt hơn các ứng dụng chat.**
+
+> **Đơn giản hơn Jira/ClickUp/Asana, nhưng đủ mạnh để quản lý một team thực tế.**
+
+> **Người dùng chủ yếu giao tiếp tự nhiên, AI chịu trách nhiệm biến cuộc trò chuyện thành hệ thống công việc có cấu trúc.**
+
+
+
+
+bổ sung: điểm danh nữa, trong 1 ngày làm việc, sẽ có nút in/out, để điểm danh làm việc, có thống kê cho tôi luôn nha (Chỉ làm web, web app)

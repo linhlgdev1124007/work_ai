@@ -1,0 +1,33 @@
+name: work-ai-tests
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: work_ai_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test_only_password
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U test -d work_ai_test']
+      interval: 2s
+      timeout: 5s
+      retries: 20
+  tests:
+    volumes:
+      - ./scripts:/app/scripts:ro
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://test:test_only_password@postgres:5432/work_ai_test?schema=public
+      NODE_ENV: test
+      PORT: 3001
+      AI_ENABLED: 'false'
+      PUSH_ENABLED: 'false'
+      REDIS_URL: ''
+      TZ: Asia/Ho_Chi_Minh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: [sh, -c, 'node scripts/migrate.cjs && node scripts/migrate.cjs && node scripts/api-integration.cjs && pnpm --filter @work-ai/database run seed && pnpm --filter @work-ai/api test']

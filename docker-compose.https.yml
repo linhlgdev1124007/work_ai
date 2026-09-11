@@ -1,0 +1,14 @@
+services:
+  proxy:
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to your DNS hostname without https://}
+    volumes:
+      - ./Caddyfile.https:/etc/caddy/Caddyfile:ro
+  api:
+    environment:
+      WEB_URL: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN}
+      CORS_ORIGINS: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN}
+      COOKIE_SECURE: 'true'

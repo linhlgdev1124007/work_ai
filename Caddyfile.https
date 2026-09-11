@@ -1,0 +1,15 @@
+{$PUBLIC_DOMAIN} {
+  encode zstd gzip
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+  @api path /api/* /socket.io/* /healthz /readyz
+  handle @api {
+    reverse_proxy api:3001
+  }
+  handle {
+    reverse_proxy web:3000
+  }
+}

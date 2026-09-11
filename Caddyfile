@@ -1,0 +1,31 @@
+{
+  # Tùy chọn global
+  email admin@techcorp.vn
+  auto_https disable_redirects
+}
+
+:80 {
+  # Nén dữ liệu
+  encode zstd gzip
+
+  # Header bảo mật
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  # Proxy WebSocket và API sang Backend
+  @api path /api/* /socket.io/* /healthz /readyz
+  handle @api {
+    reverse_proxy api:3001 {
+      header_up Host {host}
+      header_up X-Real-IP {remote}
+    }
+  }
+
+  # Proxy giao diện web Next.js
+  handle {
+    reverse_proxy web:3000
+  }
+}

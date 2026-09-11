@@ -1,0 +1,11 @@
+services:
+  api:
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google_application_credentials.json
+    volumes:
+      - type: bind
+        source: ${GOOGLE_ADC_HOST_PATH:?Set GOOGLE_ADC_HOST_PATH to the local ADC JSON file}
+        target: /run/secrets/google_application_credentials.json
+        read_only: true
+        bind:
+          create_host_path: false

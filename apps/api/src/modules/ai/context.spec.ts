@@ -1,0 +1,43 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('../../services/db.service', () => ({ db: { conversationMember: { findMany: vi.fn() }, message: { findMany: vi.fn() }, task: { findMany: vi.fn(), groupBy: vi.fn(), count: vi.fn() }, currentWork: { findMany: vi.fn() } } }));
+vi.mock('../../services/permission.service', () => ({ permissionService: { readableTaskWhere: vi.fn(() => ({ orgId: 'org', isArchived: false })), scopedUsers: vi.fn(async () => []) } }));
+const cache = vi.hoisted(() => new Map<string, string>());
+vi.mock('ioredis', () => ({ default: class { on() {} async get(key: string) { return cache.get(key); } async set(key: string, value: string) { cache.set(key, value); } } }));
+vi.mock('../../config', () => ({ config: { redisUrl: 'redis://test' } }));
+import { db } from '../../services/db.service';
+import { ContextService, businessDay } from './context.service';
+const user = { userId: 'user', orgId: 'org', systemRole: 'MEMBER' };
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(db.conversationMember.findMany).mockResolvedValue([{ conversationId: 'joined' }] as any); vi.mocked(db.message.findMany).mockResolvedValue([]); vi.mocked(db.task.findMany).mockResolvedValue([]); vi.mocked(db.currentWork.findMany).mockResolvedValue([]); });
+describe('Daily assistant context', () => {
+  it('reuses unchanged days and invalidates edits/deletions', async () => {
+    cache.clear();
+    const message = { id: 'cache-message', conversationId: 'joined', content: 'Original', createdAt: new Date('2026-09-11T01:00:00Z'), updatedAt: new Date(), sender: { fullName: 'A' } };
+    vi.mocked(db.message.findMany).mockResolvedValue([message] as any);
+    const service = new ContextService();
+    const now = new Date('2026-09-11T02:00:00Z');
+    expect((await service.build(user, 'test', now)).metadata.cachedDays).toBe(0);
+    expect((await service.build(user, 'test', now)).metadata.cachedDays).toBe(1);
+    vi.mocked(db.message.findMany).mockResolvedValue([{ ...message, content: 'Edited' }] as any);
+    const edited = await service.build(user, 'test', now);
+    expect(edited.metadata.cachedDays).toBe(0);
+    expect(edited.today[0].text).toContain('Edited');
+    vi.mocked(db.message.findMany).mockResolvedValue([]);
+    expect((await service.build(user, 'test', now)).today).toEqual([]);
+  });
+  it('does not reuse another user or membership scope', async () => {
+    cache.clear();
+    vi.mocked(db.message.findMany).mockResolvedValue([{ id: 'a', conversationId: 'joined', content: 'Private', createdAt: new Date('2026-09-11T01:00:00Z'), updatedAt: new Date(), sender: { fullName: 'A' } }] as any);
+    const service = new ContextService();
+    const now = new Date('2026-09-11T02:00:00Z');
+    await service.build(user, 'test', now);
+    expect((await service.build({ ...user, userId: 'other' }, 'test', now)).metadata.cachedDays).toBe(0);
+    vi.mocked(db.conversationMember.findMany).mockResolvedValue([]);
+    vi.mocked(db.message.findMany).mockResolvedValue([]);
+    expect((await service.build(user, 'test', now)).today).toEqual([]);
+  });
+  it('uses midnight in Vietnam rather than UTC', () => { expect(businessDay(new Date('2026-09-10T16:59:59Z'))).toBe('2026-09-10'); expect(businessDay(new Date('2026-09-10T17:00:00Z'))).toBe('2026-09-11'); });
+  it('restricts chat to membership and excludes future/deleted messages', async () => { const now = new Date(); await new ContextService().build(user, 'test', now); expect(db.message.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: { in: ['joined'] }, isDeleted: false, createdAt: { lte: now } } })); });
+  it('separates prior knowledge from today and refreshes task state', async () => { vi.mocked(db.message.findMany).mockResolvedValue([{ id: 'new', conversationId: 'joined', content: 'Today', createdAt: new Date('2026-09-11T01:00:00Z'), updatedAt: new Date(), sender: { fullName: 'A' } }, { id: 'old', conversationId: 'joined', content: 'Yesterday', createdAt: new Date('2026-09-10T01:00:00Z'), updatedAt: new Date(), sender: { fullName: 'A' } }] as any); const service = new ContextService(); const result = await service.build(user, 'test', new Date('2026-09-11T02:00:00Z')); expect(result.today[0].id).toBe('new'); expect(result.historical[0].id).toBe('old'); await service.build(user, 'test'); expect(db.task.findMany).toHaveBeenCalledTimes(2); });
+  it('returns live statistics without requesting conversation context', async () => { vi.mocked(db.task.groupBy).mockResolvedValue([{ status: 'TODO', _count: { _all: 4 } }, { status: 'COMPLETED', _count: { _all: 2 } }] as any); vi.mocked(db.task.count).mockResolvedValue(1); const result = await new ContextService().statistics(user, 'Thống kê công việc hôm nay'); expect(result?.mode).toBe('database'); expect(result?.answer).toContain('Tổng cộng: 6'); expect(db.message.findMany).not.toHaveBeenCalled(); });
+  it.each(['Thống kê công việc tháng trước', 'Thống kê công việc của Sang', 'Có bao nhiêu việc trong dự án A?'])('does not ignore unsupported filters: %s', async q => { expect(await new ContextService().statistics(user, q)).toBeNull(); expect(db.task.groupBy).not.toHaveBeenCalled(); });
+});

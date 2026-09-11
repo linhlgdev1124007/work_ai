@@ -1,0 +1,34 @@
+{
+  "name": "work-management-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web app quản lý công việc nhóm với AI làm trung tâm",
+  "scripts": {
+    "dev": "npm run dev --prefix apps/web",
+    "dev:api": "npm run dev --prefix apps/api",
+    "dev:all": "concurrently \"npm run dev:api\" \"npm run dev\"",
+    "build": "npm run build --prefix packages/shared && npm run build --prefix apps/api && npm run build --prefix apps/web",
+    "test": "docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from tests",
+    "test:ai": "npm run test:ai --prefix apps/api",
+    "test:e2e": "npm run test:e2e --prefix apps/web",
+    "db:generate": "npm run db:generate --prefix packages/database",
+    "db:push": "npm run db:push --prefix packages/database",
+    "seed": "npm run seed --prefix packages/database",
+    "backup:prod": "bash scripts/backup.sh",
+    "restore:prod": "bash scripts/restore.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@google/genai",
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma",
+      "protobufjs",
+      "bcryptjs"
+    ]
+  }
+}
