@@ -130,6 +130,8 @@ export const api = {
       fetchApi(`/admin/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ temporaryPassword }) }),
     createTeam: (dto: any) => fetchApi('/admin/teams', { method: 'POST', body: JSON.stringify(dto) }),
     createProject: (dto: any) => fetchApi('/admin/projects', { method: 'POST', body: JSON.stringify(dto) }),
+    setProjectMember: (projectId: string, userId: string, role: 'LEAD' | 'MEMBER') =>
+      fetchApi(`/admin/projects/${projectId}/members/${userId}`, { method: 'PUT', body: JSON.stringify({ role }) }),
     setTeamMember: (teamId: string, userId: string, role: 'LEAD' | 'MEMBER') =>
       fetchApi(`/admin/teams/${teamId}/members/${userId}`, { method: 'PUT', body: JSON.stringify({ role }) })
   }

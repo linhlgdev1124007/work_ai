@@ -26,7 +26,7 @@ export class AdminService {
       }),
       db.project.findMany({
         where: { orgId },
-        include: { team: true, members: { include: { user: true } } },
+        include: { team: { include: { members: { include: { user: true } } } }, members: { include: { user: true } } },
         orderBy: { createdAt: 'desc' }
       }),
       db.attendanceAdjustment.count({ where: { orgId, status: 'PENDING' } })
@@ -96,19 +96,60 @@ export class AdminService {
     });
   }
 
-  async createProject(orgId: string, dto: { teamId: string; name: string; code: string; description?: string }) {
+  async createProject(orgId: string, dto: { teamId: string; name: string; code: string; description?: string; leadIds?: string[] }) {
     if (typeof dto.name !== 'string' || !dto.name.trim() || typeof dto.code !== 'string' || !dto.code.trim() || (dto.description !== undefined && typeof dto.description !== 'string')) throw new Error('Invalid project data');
-    const team = await db.team.findFirst({ where: { id: dto.teamId, orgId } });
+    const leadIds = [...new Set(dto.leadIds || [])];
+    if (leadIds.length > 2) throw new Error('Mỗi dự án chỉ có tối đa 2 lead');
+    const team = await db.team.findFirst({
+      where: { id: dto.teamId, orgId },
+      include: { members: { where: { user: { status: 'ACTIVE' } }, select: { userId: true } } }
+    });
     if (!team) throw new Error('Team không tồn tại');
+    const memberIds = team.members.map(member => member.userId);
+    if (leadIds.some(userId => !memberIds.includes(userId))) throw new Error('Lead phải là thành viên đang hoạt động của team');
 
-    return db.project.create({
-      data: {
-        orgId,
-        teamId: dto.teamId,
-        name: dto.name.trim(),
-        code: dto.code.trim().toUpperCase(),
-        description: dto.description?.trim() || null
-      }
+    return db.$transaction(async tx => {
+      const project = await tx.project.create({
+        data: {
+          orgId,
+          teamId: dto.teamId,
+          name: dto.name.trim(),
+          code: dto.code.trim().toUpperCase(),
+          description: dto.description?.trim() || null
+        }
+      });
+      const members = memberIds.map(userId => ({ projectId: project.id, userId, role: leadIds.includes(userId) ? 'LEAD' : 'MEMBER' }));
+      if (members.length) await tx.projectMember.createMany({ data: members });
+      const conversation = await tx.conversation.create({
+        data: { orgId, teamId: dto.teamId, projectId: project.id, type: 'PROJECT', name: project.name }
+      });
+      if (members.length) await tx.conversationMember.createMany({ data: members.map(member => ({ conversationId: conversation.id, userId: member.userId, role: member.role })) });
+      return { project, conversation };
+    });
+  }
+
+  async setProjectMember(orgId: string, projectId: string, userId: string, role: 'LEAD' | 'MEMBER') {
+    const project = await db.project.findFirst({ where: { id: projectId, orgId } });
+    if (!project) throw new Error('Dự án không tồn tại');
+    const teamMember = await db.teamMember.findFirst({ where: { teamId: project.teamId, userId, user: { orgId, status: 'ACTIVE' } } });
+    if (!teamMember) throw new Error('Người dùng phải là thành viên đang hoạt động của team dự án');
+    if (role === 'LEAD') {
+      const existingLeads = await db.projectMember.count({ where: { projectId, role: 'LEAD', userId: { not: userId } } });
+      if (existingLeads >= 2) throw new Error('Mỗi dự án chỉ có tối đa 2 lead');
+    }
+    return db.$transaction(async tx => {
+      const member = await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId, userId } },
+        update: { role },
+        create: { projectId, userId, role }
+      });
+      const conversation = await tx.conversation.findFirst({ where: { projectId, orgId, type: 'PROJECT' } });
+      if (conversation) await tx.conversationMember.upsert({
+        where: { conversationId_userId: { conversationId: conversation.id, userId } },
+        update: { role },
+        create: { conversationId: conversation.id, userId, role }
+      });
+      return member;
     });
   }
 

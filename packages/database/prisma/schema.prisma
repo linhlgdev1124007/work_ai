@@ -114,6 +114,7 @@ model ProjectMember {
   id        String   @id @default(uuid())
   projectId String
   userId    String
+  role      String   @default("MEMBER") // LEAD, MEMBER
   joinedAt  DateTime @default(now())
 
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

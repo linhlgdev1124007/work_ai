@@ -111,7 +111,9 @@ export class PermissionService {
 
     const roomLead = task.sourceConversationId ? await this.isConversationLead(user.userId, task.sourceConversationId) : false;
     if (roomLead && patch?.assigneeId && !await db.conversationMember.findFirst({ where: { conversationId: task.sourceConversationId!, userId: patch.assigneeId } })) throw new ForbiddenError('Chỉ phân việc cho thành viên nhóm chat');
-    const isLead = roomLead || (task.teamId ? await this.isTeamLead(user.userId, task.teamId) : false);
+    const projectLead = task.projectId ? await this.isProjectLead(user.userId, task.projectId) : false;
+    const isLead = roomLead || projectLead || (task.teamId ? await this.isTeamLead(user.userId, task.teamId) : false);
+    if (!roomLead && projectLead && patch?.assigneeId && !await db.projectMember.findFirst({ where: { projectId: task.projectId!, userId: patch.assigneeId } })) throw new ForbiddenError('Chỉ phân việc cho thành viên dự án');
     if (!roomLead && isLead && patch?.assigneeId && task.teamId && !await db.teamMember.findFirst({ where: { teamId: task.teamId, userId: patch.assigneeId } })) throw new ForbiddenError('Chỉ phân việc cho thành viên team');
     const isOwner = task.assigneeId === user.userId || task.creatorId === user.userId;
     if (!isOwner && !isLead) {
@@ -150,6 +152,11 @@ export class PermissionService {
         where: { projectId_userId: { projectId: dto.projectId, userId: user.userId } }
       });
       if (!projectMember) throw new ForbiddenError('Bạn không có quyền tạo công việc trong dự án này');
+      if (dto.assigneeId && dto.assigneeId !== user.userId) {
+        if (projectMember.role !== 'LEAD') throw new ForbiddenError('Chỉ project lead được phân việc cho thành viên khác');
+        if (!await db.projectMember.findFirst({ where: { projectId: dto.projectId, userId: dto.assigneeId } })) throw new ForbiddenError('Chỉ phân việc cho thành viên dự án');
+        return;
+      }
     }
 
     if (dto.teamId) {
@@ -209,6 +216,11 @@ export class PermissionService {
   async isTeamLead(userId: string, teamId: string) {
     const membership = await db.teamMember.findUnique({ where: { teamId_userId: { teamId, userId } } });
     return membership?.role === TeamMemberRole.LEAD;
+  }
+
+  async isProjectLead(userId: string, projectId: string) {
+    const membership = await db.projectMember.findUnique({ where: { projectId_userId: { projectId, userId } } });
+    return membership?.role === 'LEAD';
   }
 
   async isConversationLead(userId: string, conversationId: string) {

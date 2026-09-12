@@ -68,14 +68,25 @@ adminRouter.post('/teams', async (req: Request, res: Response) => {
 
 adminRouter.post('/projects', async (req: Request, res: Response) => {
   try {
-    const { teamId, name, code } = req.body;
+    const { teamId, name, code, leadIds } = req.body;
     if (!teamId || !name || !code) {
       return res.status(400).json({ success: false, error: { message: 'Thiếu team, tên hoặc mã dự án' } });
     }
-    const data = await adminService.createProject(req.user!.orgId, req.body);
+    if (leadIds !== undefined && (!Array.isArray(leadIds) || leadIds.some(id => typeof id !== 'string'))) return res.status(400).json({ success: false, error: { message: 'Danh sách lead không hợp lệ' } });
+    const data = await adminService.createProject(req.user!.orgId, { ...req.body, leadIds });
     return res.status(201).json({ success: true, data });
   } catch (error: any) {
     return res.status(error.statusCode || (error.code === 'P2025' ? 409 : 400)).json({ success: false, error: { message: error.code?.startsWith('P') ? 'Data conflict or invalid reference' : error.message } });
+  }
+});
+
+adminRouter.put('/projects/:projectId/members/:userId', async (req: Request, res: Response) => {
+  try {
+    const role = z.enum(['LEAD', 'MEMBER']).parse(req.body.role);
+    const data = await adminService.setProjectMember(req.user!.orgId, req.params.projectId, req.params.userId, role);
+    return res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    return res.status(error.statusCode || 400).json({ success: false, error: { message: error.message } });
   }
 });
 

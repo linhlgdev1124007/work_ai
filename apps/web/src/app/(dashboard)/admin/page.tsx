@@ -13,7 +13,7 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [userForm, setUserForm] = useState({ email: '', fullName: '', systemRole: 'MEMBER' });
   const [teamName, setTeamName] = useState('');
-  const [projectForm, setProjectForm] = useState({ teamId: '', name: '', code: '' });
+  const [projectForm, setProjectForm] = useState({ teamId: '', name: '', code: '', leadIds: [] as string[] });
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
   const loadOverview = async () => {
@@ -60,11 +60,30 @@ export default function AdminPage() {
     setError(null);
     try {
       await api.admin.createProject(projectForm);
-      setProjectForm(prev => ({ ...prev, name: '', code: '' }));
+      setProjectForm(prev => ({ ...prev, name: '', code: '', leadIds: [] }));
       await loadOverview();
     } catch (e: any) {
       setError(e.message);
     }
+  };
+
+  const projectTeam = overview?.teams?.find((team: any) => team.id === projectForm.teamId);
+  const projectLeadCandidates = (projectTeam?.members || []).map((member: any) => member.user).filter((user: any) => user.status === 'ACTIVE');
+  const toggleProjectLead = (userId: string) => {
+    setProjectForm(prev => {
+      const leadIds = prev.leadIds.includes(userId) ? prev.leadIds.filter(id => id !== userId) : [...prev.leadIds, userId];
+      if (leadIds.length > 2) { setError('Mỗi dự án chỉ có tối đa 2 lead.'); return prev; }
+      return { ...prev, leadIds };
+    });
+  };
+  const updateProjectLeads = async (project: any, leadIds: string[]) => {
+    if (leadIds.length > 2) { setError('Mỗi dự án chỉ có tối đa 2 lead.'); return; }
+    setError(null);
+    try {
+      const currentLeadIds = (project.members || []).filter((member: any) => member.role === 'LEAD').map((member: any) => member.userId);
+      await Promise.all(Array.from(new Set([...currentLeadIds, ...leadIds])).map(userId => api.admin.setProjectMember(project.id, userId, leadIds.includes(userId) ? 'LEAD' : 'MEMBER')));
+      await loadOverview();
+    } catch (e: any) { setError(e.message || 'Không thể cập nhật lead dự án'); }
   };
 
   const toggleStatus = async (user: any) => {
@@ -187,6 +206,24 @@ export default function AdminPage() {
           </div>
         </section>
 
+        <section className="xl:col-span-2 bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-zinc-200 flex items-center gap-2 font-bold text-zinc-900"><Building2 className="w-5 h-5 text-emerald-600" />Dự án</div>
+          <div className="divide-y divide-zinc-100">
+            {overview?.projects?.map((project: any) => {
+              const leadIds = (project.members || []).filter((member: any) => member.role === 'LEAD').map((member: any) => member.userId);
+              const candidates = (project.team?.members || []).map((member: any) => member.user).filter((user: any) => user.status === 'ACTIVE');
+              return <div key={project.id} className="p-4 space-y-3">
+                <div><div className="font-semibold text-zinc-900">{project.name} <span className="text-xs text-zinc-400">{project.code}</span></div><div className="text-xs text-zinc-500">Team: {project.team?.name}</div></div>
+                <label className="block text-xs font-semibold text-zinc-600">Project lead (tối đa 2)</label>
+                <select multiple value={leadIds} onChange={event => updateProjectLeads(project, Array.from(event.currentTarget.selectedOptions).map(option => option.value))} className="w-full min-h-24 border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                  {candidates.map((user: any) => <option key={user.id} value={user.id}>{user.fullName}</option>)}
+                </select>
+              </div>;
+            })}
+            {!overview?.projects?.length && <div className="p-4 text-sm text-zinc-500">Chưa có dự án.</div>}
+          </div>
+        </section>
+
         <aside className="space-y-6">
           <form onSubmit={createUser} className="bg-white border border-zinc-200 rounded-lg shadow-sm p-4 space-y-3">
             <div className="font-bold text-zinc-900 flex items-center gap-2">
@@ -216,11 +253,12 @@ export default function AdminPage() {
               <Building2 className="w-5 h-5 text-emerald-600" />
               Tạo dự án
             </div>
-            <select value={projectForm.teamId} onChange={e => setProjectForm({ ...projectForm, teamId: e.target.value })} className="w-full border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+            <select value={projectForm.teamId} onChange={e => setProjectForm({ ...projectForm, teamId: e.target.value, leadIds: [] })} className="w-full border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
               {overview?.teams?.map((team: any) => <option key={team.id} value={team.id}>{team.name}</option>)}
             </select>
             <input value={projectForm.name} onChange={e => setProjectForm({ ...projectForm, name: e.target.value })} required placeholder="Tên dự án" className="w-full border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
             <input value={projectForm.code} onChange={e => setProjectForm({ ...projectForm, code: e.target.value })} required placeholder="Mã dự án" className="w-full border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+            {projectLeadCandidates.length > 0 && <div className="space-y-2"><div className="text-xs font-semibold text-zinc-600">Chọn tối đa 2 lead</div>{projectLeadCandidates.map((user: any) => <label key={user.id} className="flex items-center gap-2 text-sm text-zinc-700"><input type="checkbox" checked={projectForm.leadIds.includes(user.id)} onChange={() => toggleProjectLead(user.id)} />{user.fullName}</label>)}</div>}
             <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-md py-2 text-sm font-bold">Tạo dự án</button>
           </form>
         </aside>

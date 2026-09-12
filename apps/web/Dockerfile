@@ -15,6 +15,7 @@ COPY packages/database/package.json ./packages/database/
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+RUN pnpm --filter @work-ai/database run db:generate
 RUN pnpm --filter @work-ai/shared run build
 RUN pnpm --filter @work-ai/web run build
 
