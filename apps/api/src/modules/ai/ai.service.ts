@@ -15,7 +15,7 @@ export class AiService {
   });
 
   /**
-   * Gọi Vertex AI API (Gemini 2.5) với cấu hình GCP Project và Location
+   * Gọi Vertex AI API với cấu hình GCP Project và Location.
    */
   async callVertexGemini(prompt: string, systemInstruction?: string): Promise<string> {
     try {
@@ -37,11 +37,15 @@ export class AiService {
           }
         ],
         generationConfig: {
-          temperature: 0.2, // Nhiệt độ thấp để phân tích có cấu trúc chính xác
           maxOutputTokens: systemInstruction ? 2048 : 1024,
-          // Flash thinking shares the output budget and can truncate short JSON responses.
-          ...(/^gemini-2\.5-flash(?:$|-)/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-          responseMimeType: systemInstruction ? 'application/json' : 'text/plain'
+          responseMimeType: systemInstruction ? 'application/json' : 'text/plain',
+          ...(model === 'gemini-3.8-flash'
+            ? { thinkingConfig: { thinkingLevel: 'LOW' } }
+            : {
+              temperature: 0.2, // Nhiệt độ thấp để phân tích có cấu trúc chính xác
+              // Flash thinking shares the output budget and can truncate short JSON responses.
+              ...(/^gemini-2\.5-flash(?:$|-)/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {})
+            })
         }
       };
 

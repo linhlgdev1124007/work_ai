@@ -19,8 +19,8 @@ export const config = {
   // Cấu hình Google Cloud Vertex AI
   vertex: {
     projectId: process.env.GOOGLE_CLOUD_PROJECT || 'gemini-image-benchmark',
-    location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
-    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    location: process.env.GOOGLE_CLOUD_LOCATION || 'global',
+    model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
     keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS || undefined
   }
 };
