@@ -30,7 +30,7 @@ export default function DashboardLayout({ children }: { children:React.ReactNode
   useEffect(()=>{setMenu(false);},[pathname]);
   useEffect(()=>{const key=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();setSearch(s=>!s);}if(e.key==='Escape')setMenu(false);};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
   useEffect(()=>{let active=true;const id=setTimeout(async()=>{if(!query.trim()){setResults(null);return;}try{const res=await api.search.universal(query);if(active)setResults(res.data);}catch(e:any){if(active)notify(e.message,true);}},250);return()=>{active=false;clearTimeout(id);};},[query]);
-  const nav=[...navigation,...(user?.systemRole==='ADMIN'?[{name:'Quản trị',href:'/admin',icon:ShieldCheck}]:[])];
+  const nav=[...navigation,...(user?.systemRole==='ADMIN'||user?.teams?.some((team:any)=>team.role==='LEAD')?[{name:'Quản trị',href:'/admin',icon:ShieldCheck}]:[])];
   const current=nav.find(n=>pathname.startsWith(n.href));
   const logout=async()=>{try{await api.auth.logout();router.replace('/login');}catch(e:any){notify(e.message,true);}};
   if (!user) return <main className="page-content"><LoadState loading={!error} error={error} retry={load}/></main>;

@@ -1,19 +1,22 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Building2, Cpu, KeyRound, Plus, RotateCw, ShieldCheck, Users } from 'lucide-react';
+import { Building2, Cpu, KeyRound, Plus, RotateCw, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { WorkspaceContext } from '@/components/workspace';
 
 function formatNumber(value: number | null | undefined) {
   return typeof value === 'number' ? value.toLocaleString('vi-VN') : '0';
 }
 
 export default function AdminPage() {
+  const { user: currentUser } = useContext(WorkspaceContext);
+  const isSystemAdmin = currentUser?.systemRole === 'ADMIN';
   const [overview, setOverview] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [userForm, setUserForm] = useState({ email: '', fullName: '', systemRole: 'MEMBER' });
   const [teamName, setTeamName] = useState('');
-  const [projectForm, setProjectForm] = useState({ teamId: '', name: '', code: '', leadIds: [] as string[] });
+  const [projectForm, setProjectForm] = useState({ teamId: '', name: '', code: '' });
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
   const loadOverview = async () => {
@@ -60,31 +63,13 @@ export default function AdminPage() {
     setError(null);
     try {
       await api.admin.createProject(projectForm);
-      setProjectForm(prev => ({ ...prev, name: '', code: '', leadIds: [] }));
+      setProjectForm(prev => ({ ...prev, name: '', code: '' }));
       await loadOverview();
     } catch (e: any) {
       setError(e.message);
     }
   };
 
-  const projectTeam = overview?.teams?.find((team: any) => team.id === projectForm.teamId);
-  const projectLeadCandidates = (projectTeam?.members || []).map((member: any) => member.user).filter((user: any) => user.status === 'ACTIVE');
-  const toggleProjectLead = (userId: string) => {
-    setProjectForm(prev => {
-      const leadIds = prev.leadIds.includes(userId) ? prev.leadIds.filter(id => id !== userId) : [...prev.leadIds, userId];
-      if (leadIds.length > 2) { setError('Mỗi dự án chỉ có tối đa 2 lead.'); return prev; }
-      return { ...prev, leadIds };
-    });
-  };
-  const updateProjectLeads = async (project: any, leadIds: string[]) => {
-    if (leadIds.length > 2) { setError('Mỗi dự án chỉ có tối đa 2 lead.'); return; }
-    setError(null);
-    try {
-      const currentLeadIds = (project.members || []).filter((member: any) => member.role === 'LEAD').map((member: any) => member.userId);
-      await Promise.all(Array.from(new Set([...currentLeadIds, ...leadIds])).map(userId => api.admin.setProjectMember(project.id, userId, leadIds.includes(userId) ? 'LEAD' : 'MEMBER')));
-      await loadOverview();
-    } catch (e: any) { setError(e.message || 'Không thể cập nhật lead dự án'); }
-  };
   const setTeamMember = async (teamId: string, userId: string, role: 'LEAD' | 'MEMBER') => {
     setError(null);
     try {
@@ -99,6 +84,12 @@ export default function AdminPage() {
     const role = String(form.get('role') || 'MEMBER') as 'LEAD' | 'MEMBER';
     if (!userId) return;
     await setTeamMember(teamId, userId, role);
+  };
+  const removeTeamMember = async (teamId: string, userId: string) => {
+    if (!window.confirm('Xóa thành viên khỏi team và tất cả chat dự án thuộc team này?')) return;
+    setError(null);
+    try { await api.admin.removeTeamMember(teamId, userId); await loadOverview(); }
+    catch (e: any) { setError(e.message || 'Không thể xóa thành viên khỏi team'); }
   };
 
   const toggleStatus = async (user: any) => {
@@ -177,7 +168,7 @@ export default function AdminPage() {
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <section className="xl:col-span-2 bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
+        {isSystemAdmin && <section className="xl:col-span-2 bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
           <div className="p-4 border-b border-zinc-200 flex items-center gap-2 font-bold text-zinc-900">
             <Users className="w-5 h-5 text-emerald-600" />
             Nhân sự
@@ -219,7 +210,7 @@ export default function AdminPage() {
               </tbody>
             </table>
           </div>
-        </section>
+        </section>}
 
         <section className="xl:col-span-2 bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
           <div className="p-4 border-b border-zinc-200 flex items-center gap-2 font-bold text-zinc-900"><Users className="w-5 h-5 text-emerald-600" />Team và thành viên</div>
@@ -229,7 +220,7 @@ export default function AdminPage() {
               const availableUsers = (overview?.users || []).filter((user: any) => user.status === 'ACTIVE' && !memberIds.has(user.id));
               return <div key={team.id} className="p-4 space-y-3">
                 <div><div className="font-semibold text-zinc-900">{team.name}</div>{team.description && <div className="text-xs text-zinc-500">{team.description}</div>}</div>
-                <div className="flex flex-wrap gap-2">{(team.members || []).map((member: any) => <label key={member.userId} className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs text-zinc-700"><span>{member.user?.fullName}</span><select aria-label={`Vai trò của ${member.user?.fullName}`} value={member.role} onChange={event => void setTeamMember(team.id, member.userId, event.target.value as 'LEAD' | 'MEMBER')} className="bg-transparent font-semibold text-emerald-700 outline-none"><option value="MEMBER">Member</option><option value="LEAD">Lead</option></select></label>)}{!(team.members || []).length && <span className="text-sm text-zinc-500">Chưa có thành viên.</span>}</div>
+                <div className="flex flex-wrap gap-2">{(team.members || []).map((member: any) => <div key={member.userId} className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs text-zinc-700"><span>{member.user?.fullName}</span><select aria-label={`Vai trò của ${member.user?.fullName}`} value={member.role} onChange={event => void setTeamMember(team.id, member.userId, event.target.value as 'LEAD' | 'MEMBER')} className="bg-transparent font-semibold text-emerald-700 outline-none"><option value="MEMBER">Member</option><option value="LEAD">Lead</option></select><button type="button" aria-label={`Xóa ${member.user?.fullName} khỏi team`} title="Xóa khỏi team" onClick={() => void removeTeamMember(team.id, member.userId)} className="text-zinc-400 hover:text-red-600"><Trash2 size={14} /></button></div>)}{!(team.members || []).length && <span className="text-sm text-zinc-500">Chưa có thành viên.</span>}</div>
                 {availableUsers.length > 0 && <form onSubmit={event => void addTeamMember(event, team.id)} className="flex flex-wrap gap-2"><select name="userId" required defaultValue="" className="min-w-48 border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"><option value="" disabled>Chọn người dùng</option>{availableUsers.map((user: any) => <option key={user.id} value={user.id}>{user.fullName} · {user.email}</option>)}</select><select name="role" defaultValue="MEMBER" className="border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"><option value="MEMBER">Member</option><option value="LEAD">Lead</option></select><button className="btn btn-small btn-primary"><Plus size={14} />Thêm thành viên</button></form>}
               </div>;
             })}
@@ -241,14 +232,9 @@ export default function AdminPage() {
           <div className="p-4 border-b border-zinc-200 flex items-center gap-2 font-bold text-zinc-900"><Building2 className="w-5 h-5 text-emerald-600" />Dự án</div>
           <div className="divide-y divide-zinc-100">
             {overview?.projects?.map((project: any) => {
-              const leadIds = (project.members || []).filter((member: any) => member.role === 'LEAD').map((member: any) => member.userId);
-              const candidates = (project.team?.members || []).map((member: any) => member.user).filter((user: any) => user.status === 'ACTIVE');
               return <div key={project.id} className="p-4 space-y-3">
                 <div><div className="font-semibold text-zinc-900">{project.name} <span className="text-xs text-zinc-400">{project.code}</span></div><div className="text-xs text-zinc-500">Team: {project.team?.name}</div></div>
-                <label className="block text-xs font-semibold text-zinc-600">Project lead (tối đa 2)</label>
-                <select multiple value={leadIds} onChange={event => updateProjectLeads(project, Array.from(event.currentTarget.selectedOptions).map(option => option.value))} className="w-full min-h-24 border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
-                  {candidates.map((user: any) => <option key={user.id} value={user.id}>{user.fullName}</option>)}
-                </select>
+                <div className="text-xs text-zinc-500">{project.members?.length || 0} thành viên, đồng bộ từ team. Team lead có quyền phân công và quản lý chat dự án.</div>
               </div>;
             })}
             {!overview?.projects?.length && <div className="p-4 text-sm text-zinc-500">Chưa có dự án.</div>}
@@ -256,7 +242,7 @@ export default function AdminPage() {
         </section>
 
         <aside className="space-y-6">
-          <form onSubmit={createUser} className="bg-white border border-zinc-200 rounded-lg shadow-sm p-4 space-y-3">
+          {isSystemAdmin && <><form onSubmit={createUser} className="bg-white border border-zinc-200 rounded-lg shadow-sm p-4 space-y-3">
             <div className="font-bold text-zinc-900 flex items-center gap-2">
               <Plus className="w-5 h-5 text-emerald-600" />
               Tạo người dùng
@@ -277,19 +263,19 @@ export default function AdminPage() {
             </div>
             <input value={teamName} onChange={e => setTeamName(e.target.value)} required placeholder="Tên team" className="w-full border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
             <button className="w-full bg-zinc-900 hover:bg-zinc-700 text-white rounded-md py-2 text-sm font-bold">Tạo team</button>
-          </form>
+          </form></>}
 
           <form onSubmit={createProject} className="bg-white border border-zinc-200 rounded-lg shadow-sm p-4 space-y-3">
             <div className="font-bold text-zinc-900 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-emerald-600" />
               Tạo dự án
             </div>
-            <select value={projectForm.teamId} onChange={e => setProjectForm({ ...projectForm, teamId: e.target.value, leadIds: [] })} className="w-full border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+            <select value={projectForm.teamId} onChange={e => setProjectForm({ ...projectForm, teamId: e.target.value })} className="w-full border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
               {overview?.teams?.map((team: any) => <option key={team.id} value={team.id}>{team.name}</option>)}
             </select>
             <input value={projectForm.name} onChange={e => setProjectForm({ ...projectForm, name: e.target.value })} required placeholder="Tên dự án" className="w-full border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
             <input value={projectForm.code} onChange={e => setProjectForm({ ...projectForm, code: e.target.value })} required placeholder="Mã dự án" className="w-full border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
-            {projectLeadCandidates.length > 0 && <div className="space-y-2"><div className="text-xs font-semibold text-zinc-600">Chọn tối đa 2 lead</div>{projectLeadCandidates.map((user: any) => <label key={user.id} className="flex items-center gap-2 text-sm text-zinc-700"><input type="checkbox" checked={projectForm.leadIds.includes(user.id)} onChange={() => toggleProjectLead(user.id)} />{user.fullName}</label>)}</div>}
+            <p className="text-xs text-zinc-500">Thành viên và lead của team sẽ tự động tham gia chat dự án.</p>
             <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-md py-2 text-sm font-bold">Tạo dự án</button>
           </form>
         </aside>
