@@ -85,6 +85,21 @@ export default function AdminPage() {
       await loadOverview();
     } catch (e: any) { setError(e.message || 'Không thể cập nhật lead dự án'); }
   };
+  const setTeamMember = async (teamId: string, userId: string, role: 'LEAD' | 'MEMBER') => {
+    setError(null);
+    try {
+      await api.admin.setTeamMember(teamId, userId, role);
+      await loadOverview();
+    } catch (e: any) { setError(e.message || 'Không thể cập nhật thành viên team'); }
+  };
+  const addTeamMember = async (event: React.FormEvent<HTMLFormElement>, teamId: string) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const userId = String(form.get('userId') || '');
+    const role = String(form.get('role') || 'MEMBER') as 'LEAD' | 'MEMBER';
+    if (!userId) return;
+    await setTeamMember(teamId, userId, role);
+  };
 
   const toggleStatus = async (user: any) => {
     const nextStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
@@ -203,6 +218,22 @@ export default function AdminPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </section>
+
+        <section className="xl:col-span-2 bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-zinc-200 flex items-center gap-2 font-bold text-zinc-900"><Users className="w-5 h-5 text-emerald-600" />Team và thành viên</div>
+          <div className="divide-y divide-zinc-100">
+            {overview?.teams?.map((team: any) => {
+              const memberIds = new Set((team.members || []).map((member: any) => member.userId));
+              const availableUsers = (overview?.users || []).filter((user: any) => user.status === 'ACTIVE' && !memberIds.has(user.id));
+              return <div key={team.id} className="p-4 space-y-3">
+                <div><div className="font-semibold text-zinc-900">{team.name}</div>{team.description && <div className="text-xs text-zinc-500">{team.description}</div>}</div>
+                <div className="flex flex-wrap gap-2">{(team.members || []).map((member: any) => <label key={member.userId} className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs text-zinc-700"><span>{member.user?.fullName}</span><select aria-label={`Vai trò của ${member.user?.fullName}`} value={member.role} onChange={event => void setTeamMember(team.id, member.userId, event.target.value as 'LEAD' | 'MEMBER')} className="bg-transparent font-semibold text-emerald-700 outline-none"><option value="MEMBER">Member</option><option value="LEAD">Lead</option></select></label>)}{!(team.members || []).length && <span className="text-sm text-zinc-500">Chưa có thành viên.</span>}</div>
+                {availableUsers.length > 0 && <form onSubmit={event => void addTeamMember(event, team.id)} className="flex flex-wrap gap-2"><select name="userId" required defaultValue="" className="min-w-48 border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"><option value="" disabled>Chọn người dùng</option>{availableUsers.map((user: any) => <option key={user.id} value={user.id}>{user.fullName} · {user.email}</option>)}</select><select name="role" defaultValue="MEMBER" className="border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"><option value="MEMBER">Member</option><option value="LEAD">Lead</option></select><button className="btn btn-small btn-primary"><Plus size={14} />Thêm thành viên</button></form>}
+              </div>;
+            })}
+            {!overview?.teams?.length && <div className="p-4 text-sm text-zinc-500">Chưa có team.</div>}
           </div>
         </section>
 
