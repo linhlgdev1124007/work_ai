@@ -2,6 +2,7 @@ import { parseClassification } from './classification';
 import { aiUsageScope, recordUsage } from './usage.service';
 import { z } from 'zod';
 import { GoogleAuth } from 'google-auth-library';
+import { createHash } from 'crypto';
 import { db } from '../../services/db.service';
 import { config } from '../../config';
 import { AiIntent, AiActionStatus, TaskStatus, TaskPriority, AiExtractedAction, UpdateTaskSchema, CreateTaskSchema } from '@work-ai/shared';
@@ -17,14 +18,9 @@ export class AiService {
   /**
    * Gọi Vertex AI API với cấu hình GCP Project và Location.
    */
-  async callVertexGemini(prompt: string, systemInstruction?: string): Promise<string> {
+  async callVertexGemini(prompt: string, systemInstruction?: string, cachedContent?: string): Promise<string> {
     try {
-      const client = await this.auth.getClient();
-      const accessToken = (await client.getAccessToken()).token;
-
-      if (!accessToken) {
-        throw new Error('Không thể lấy access token từ Google Cloud ADC');
-      }
+      const accessToken = await this.getAccessToken();
 
       const { projectId, location, model } = config.vertex;
       const host = location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`;
@@ -49,6 +45,8 @@ export class AiService {
             })
         }
       };
+
+      if (cachedContent) requestBody.cachedContent = cachedContent;
 
       if (systemInstruction) {
         requestBody.systemInstruction = {
@@ -94,6 +92,68 @@ export class AiService {
     } catch (error: any) {
       console.warn(`[Vertex AI unavailable]: ${error.message}`);
       throw Object.assign(new Error('AI hiện không khả dụng. Vui lòng thử lại sau.'), { statusCode: 503 });
+    }
+  }
+
+  private async getAccessToken() {
+    const client = await this.auth.getClient();
+    const accessToken = (await client.getAccessToken()).token;
+    if (!accessToken) throw new Error('Không thể lấy access token từ Google Cloud ADC');
+    return accessToken;
+  }
+
+  private async getProjectCache(conversationId: string): Promise<string | undefined> {
+    const conversation = await db.conversation.findUnique({ where: { id: conversationId }, select: { projectId: true } });
+    if (!conversation?.projectId) return undefined;
+
+    const now = new Date();
+    const existing = await db.projectAiCache.findUnique({ where: { projectId: conversation.projectId } });
+    if (existing?.model === config.vertex.model && existing.expiresAt.getTime() > now.getTime() + 120000) return existing.cacheName;
+
+    // Keep the cache stable for its full TTL. Fresh chat and task state still travel in each request.
+    const [project, history] = await Promise.all([
+      db.project.findUnique({
+        where: { id: conversation.projectId },
+        select: { id: true, name: true, code: true, description: true, team: { select: { name: true } }, members: { select: { role: true, user: { select: { fullName: true, email: true } } } } }
+      }),
+      db.message.findMany({
+        where: { conversation: { projectId: conversation.projectId }, isDeleted: false, createdAt: { lt: new Date(now.getTime() - 3600000) } },
+        orderBy: { createdAt: 'asc' },
+        take: 160,
+        select: { content: true, createdAt: true, sender: { select: { fullName: true } } }
+      })
+    ]);
+    if (!project) return undefined;
+    const snapshot = JSON.stringify({ project, historicalMessages: history.map(message => ({ sender: message.sender.fullName, text: message.content.slice(0, 700), at: message.createdAt.toISOString() })) });
+    // Gemini 3 explicit caches require 4,096 tokens. Avoid creating a billable cache that Vertex will reject.
+    if (snapshot.length < 16384) return undefined;
+
+    try {
+      const { projectId, location, model } = config.vertex;
+      const host = location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`;
+      const response = await fetch(`https://${host}/v1/projects/${projectId}/locations/${location}/cachedContents`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${await this.getAccessToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: `projects/${projectId}/locations/${location}/publishers/google/models/${model}`,
+          displayName: `project-${createHash('sha256').update(project.id).digest('hex').slice(0, 12)}`,
+          contents: [{ role: 'user', parts: [{ text: snapshot }] }],
+          ttl: '3600s'
+        }),
+        signal: AbortSignal.timeout(20000)
+      });
+      if (!response.ok) throw new Error(`cache create returned ${response.status}: ${(await response.text()).slice(0, 300)}`);
+      const cache = await response.json() as { name?: string; expireTime?: string };
+      if (!cache.name || !cache.expireTime) throw new Error('Vertex did not return a cache name');
+      await db.projectAiCache.upsert({
+        where: { projectId: project.id },
+        create: { projectId: project.id, model, cacheName: cache.name, expiresAt: new Date(cache.expireTime) },
+        update: { model, cacheName: cache.name, expiresAt: new Date(cache.expireTime) }
+      });
+      return cache.name;
+    } catch (error) {
+      console.warn(`[Vertex AI cache unavailable]: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
     }
   }
 
@@ -298,6 +358,7 @@ export class AiService {
         const labels: Record<string, string> = { TODO: 'Chưa làm', IN_PROGRESS: 'Đang làm', WAITING: 'Đang chờ', REVIEW: 'Chờ duyệt', COMPLETED: 'Hoàn thành', PAUSED: 'Tạm dừng' };
         raw = JSON.stringify({ is_work_instruction: false, intent: 'QUERY_TASKS', confidence: 1, data: {}, reply_markdown: `### Công việc trong nhóm\n\nTổng cộng: **${context.statistics.reduce((sum, c) => sum + c._count, 0)}**\n\n| Trạng thái | Số việc |\n| --- | ---: |\n${context.statistics.map(c => `| ${labels[c.status] || c.status} | ${c._count} |`).join('\n')}\n\nSố liệu trực tiếp lúc ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.` });
       } else {
+      const projectCache = await this.getProjectCache(conversationId);
       raw = await this.callVertexGemini(JSON.stringify({ now: source.createdAt.toISOString(), timezone: 'Asia/Ho_Chi_Minh', members: context.members, tasks: context.activeTasks, statistics: context.statistics, taskSampleLimit: 80, recent: context.recentTurns, senderId, messageId, message: source.content }), `Bạn là B6, phân loại tin nhắn trong nhóm làm việc có cả trao đổi công việc lẫn nói vui.
 Khi được tag @b6 hoặc hỏi tiến độ/thống kê, thêm reply_markdown tiếng Việt vào JSON để trả lời dựa duy nhất dữ liệu nhóm. Không khẳng định đã thực thi action. statistics là số tổng chính xác theo trạng thái; tasks chỉ là tối đa 80 việc gần cập nhật. Nếu không thấy việc hoặc có nhiều việc tương tự, hỏi lại tên/ID, không đoán. Không tiết lộ thông tin ngoài dữ liệu này.
 Với CREATE_TASK, so sánh ngữ nghĩa với tasks kể cả tên khác, thêm duplicate_task_ids tối đa 5 ID có khả năng cùng công việc; không tự hợp nhất. Với câu "task abc xong rồi nha", đề xuất UPDATE_STATUS COMPLETED đúng task_id nếu xác định chắc chắn. Câu hỏi tiến độ dùng QUERY_TASKS, không cập nhật; nếu hỏi một việc xác định chắc chắn thì trả data.task_id đúng việc đó. Khi người nhận trả lời ngắn "rồi", "xong rồi" cho câu hỏi ngay trước về việc đã xong chưa, dùng UPDATE_STATUS COMPLETED và data.confirmation_message_id là ID câu hỏi; chỉ khi xác định duy nhất công việc và chính người nhận trả lời. Không suy diễn từ câu cảm thán, đồng ý nhận việc, lời hứa tương lai, phủ định hay câu hỏi. Câu xác nhận hoàn tất rõ ràng có confidence >=0.95. Thiếu ngữ cảnh thì hỏi lại, không đoán.
@@ -308,7 +369,7 @@ confidence đánh giá độ rõ của YÊU CẦU CÔNG VIỆC, không đánh gi
 Ví dụ "Sang làm banner Jeminise trước 17h mai nhé" là CREATE_TASK. "Sang làm giám đốc vũ trụ đi haha", "Hôm nay deadline dí chạy mất dép", "Ăn trưa thôi", "Hay là để Sang làm nhỉ?" không phải phân công.
 "@Nguyễn Văn Sang mai done task SEO cho Tuấn nhe" là yêu cầu Sang hoàn thành SEO cho Tuấn ngày mai, không phải báo đã hoàn thành. Khi chưa xác định task hiện có, đề xuất CREATE_TASK, title "SEO cho Tuấn", assignee_name là tên đầy đủ của Sang trong members (không có @). Tuấn là người thụ hưởng, không phải người được giao. Nếu có việc tương tự, thêm duplicate_task_ids để người dùng xác nhận.
 Phân biệt "mai done" (yêu cầu tương lai) với "đã done/xong rồi" (báo hoàn thành). "now" là thời điểm gửi tin nhắn, mọi ngày tương đối tính theo đó tại timezone đã cho. Có ngày nhưng không có giờ: hạn đề xuất là cuối ngày đó 23:59:59 +07:00, phải chờ xác nhận. Không nêu ngày thì bỏ deadline.
-Không chỉ dựa vào từ khóa làm/xong/deadline hoặc @tag. Câu vui có thể đi kèm yêu cầu thật: chỉ trích xuất yêu cầu rõ ràng. Không tự bịa task_id; dùng danh sách task. Người nhận chỉ lấy từ thành viên, dùng đúng tên đầy đủ trong members. Không chắc thì false hoặc confidence thấp.`);
+Không chỉ dựa vào từ khóa làm/xong/deadline hoặc @tag. Câu vui có thể đi kèm yêu cầu thật: chỉ trích xuất yêu cầu rõ ràng. Không tự bịa task_id; dùng danh sách task. Người nhận chỉ lấy từ thành viên, dùng đúng tên đầy đủ trong members. Không chắc thì false hoặc confidence thấp.`, projectCache);
       }
       parsed = parseClassification(raw);
       if (parsed.actionable && parsed.data.assignee_name && context.members.filter(m => m.name.toLowerCase().includes(parsed!.data.assignee_name!.toLowerCase())).length !== 1) throw new Error('Ambiguous assignee');

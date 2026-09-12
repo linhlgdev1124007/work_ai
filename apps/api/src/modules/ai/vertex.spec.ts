@@ -60,4 +60,13 @@ describe('Vertex response completeness and token budget', () => {
     await service.callVertexGemini('hello');
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).generationConfig.thinkingConfig).toBeUndefined();
   });
+
+  it('references an explicit project cache when one is available', async () => {
+    config.vertex.model = 'gemini-3.8-flash';
+    const { service, fetchMock } = setup([completed('{}')]);
+    await service.callVertexGemini('assignment', 'Classify', 'projects/test/locations/global/cachedContents/project-cache');
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.cachedContent).toBe('projects/test/locations/global/cachedContents/project-cache');
+    expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'LOW' });
+  });
 });
