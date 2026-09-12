@@ -32,7 +32,15 @@ export class AdminService {
         include: { team: { include: { members: { include: { user: { select: { id: true, fullName: true, email: true, status: true } } } } } }, members: { include: { user: { select: { id: true, fullName: true, email: true, status: true } } } } },
         orderBy: { createdAt: 'desc' }
       }),
-      db.attendanceAdjustment.count({ where: { orgId, status: 'PENDING', ...(isAdmin ? {} : { user: { teamMemberships: { some: { teamId: { in: leadTeams.map(item => item.teamId) } } } }) } })
+      db.attendanceAdjustment.count({
+        where: {
+          orgId,
+          status: 'PENDING',
+          ...(isAdmin ? {} : {
+            user: { teamMemberships: { some: { teamId: { in: leadTeams.map(item => item.teamId) } } } }
+          })
+        }
+      })
     ]);
 
     const usage = await db.aiTokenUsage.aggregate({ where: { orgId: isAdmin ? orgId : undefined }, _sum: { inputTokens: true, cachedInputTokens: true, outputTokens: true }, _count: true, _min: { createdAt: true } });
