@@ -27,7 +27,8 @@ export class AiService {
       }
 
       const { projectId, location, model } = config.vertex;
-      const endpoint = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:generateContent`;
+      const host = location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`;
+      const endpoint = `https://${host}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:generateContent`;
 
       const requestBody: any = {
         contents: [
