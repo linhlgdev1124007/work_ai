@@ -22,6 +22,7 @@ import { remindersService } from './modules/reminders/reminders.service';
 import { adminRouter } from './modules/admin/admin.controller';
 import { notificationsRouter } from './modules/notifications/notifications.controller';
 import { notificationsService } from './modules/notifications/notifications.service';
+import { usersRouter } from './modules/users/users.controller';
 
 const app = express();
 app.disable('x-powered-by');
@@ -171,6 +172,7 @@ app.use('/api/v1/search', searchRouter);
 app.use('/api/v1/reports', reportsRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/notifications', notificationsRouter);
+app.use('/api/v1/users', usersRouter);
 app.use((req, res) => res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Endpoint not found' } }));
 app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   const status = error.type === 'entity.parse.failed' ? 400 : error.status || 500;

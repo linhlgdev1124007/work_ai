@@ -134,5 +134,8 @@ export const api = {
       fetchApi(`/admin/teams/${teamId}/members/${userId}`, { method: 'PUT', body: JSON.stringify({ role }) }),
     removeTeamMember: (teamId: string, userId: string) =>
       fetchApi(`/admin/teams/${teamId}/members/${userId}`, { method: 'DELETE' })
+  },
+  users: {
+    getNotes: (userId: string) => fetchApi(`/users/${userId}/notes`)
   }
 };

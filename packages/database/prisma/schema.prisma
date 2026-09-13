@@ -28,6 +28,7 @@ model Organization {
   aiActions             AiAction[]
   auditEvents           AuditEvent[]
   notifications         Notification[]
+  userNotes             UserNote[]
 }
 
 model User {
@@ -63,6 +64,8 @@ model User {
   pushSubscriptions  PushSubscription[]
   notificationPreferences NotificationPreference?
   initiatedAiActions AiAction[]   @relation("AiActionInitiator")
+  userNotes          UserNote[]   @relation("UserNotes")
+  createdNotes       UserNote[]   @relation("CreatedNotes")
 }
 
 model Team {
@@ -224,6 +227,7 @@ model Message {
   aiRuns           AiRun[]
   aiActions        AiAction[]
   tasksCreated     Task[]       @relation("TaskSourceMessage")
+  userNotes        UserNote[]
   @@index([conversationId, createdAt, id])
 }
 
@@ -578,4 +582,22 @@ model OutboxEvent {
   status     String   @default("PENDING") // PENDING, PROCESSED, FAILED
   retryCount Int      @default(0)
   createdAt  DateTime @default(now())
+}
+
+// 11. GHI CHÚ NHÂN SỰ
+model UserNote {
+  id              String   @id @default(uuid())
+  orgId           String
+  userId          String
+  creatorId       String
+  content         String
+  type            String   @default("GENERAL") // GENERAL, POSITIVE, NEGATIVE
+  sourceMessageId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user            User         @relation("UserNotes", fields: [userId], references: [id], onDelete: Cascade)
+  creator         User         @relation("CreatedNotes", fields: [creatorId], references: [id], onDelete: Cascade)
+  sourceMessage   Message?     @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
 }
